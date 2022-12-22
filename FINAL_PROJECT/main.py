@@ -52,7 +52,7 @@ if __name__ == '__main__':
         BATH = 64
         
         # Memory relative
-        REPLAY_MEMORY = 512
+        REPLAY_MEMORY = 4096
         BEGIN_LEARN_SIZE = 128 # This should be smaller than `REPLAY_MEMORY` to start learning
         memory = PER(REPLAY_MEMORY)
 
@@ -61,9 +61,9 @@ if __name__ == '__main__':
         learn_step = 0
 
         # Epsilon relatife
-        epsilon = 0.5
+        epsilon = 0.2
         FINAL_EPSILON = 0.001 # Smallest epsilon
-        EXPLORE = 2000000 # Controlling the epsilon
+        EXPLORE = 2000 # Controlling the epsilon
 
         for epoch in count():
             # Reset environment

@@ -179,17 +179,17 @@ class Game:
         self.state, self.reward, self.done, _, _ = self.env.step(action)   
 
         ### Begin: Draw infomations ###
-        self.__draw_background()
+        # self.__draw_background()
 
-        self.__draw_player()
+        # self.__draw_player()
 
-        self.__draw_info()
+        # self.__draw_info()
 
-        self.__draw_lose_pt()
-        ### End: Draw infomations ###
+        # self.__draw_lose_pt()
+        # ### End: Draw infomations ###
 
-        # Update the window
-        pygame.display.flip()
+        # # Update the window
+        # pygame.display.flip()
 
         # If the window was closed, end the game
         for event in pygame.event.get():
