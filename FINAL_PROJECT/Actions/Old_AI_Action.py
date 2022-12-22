@@ -5,47 +5,6 @@ import random
 import numpy as np
 INFINITE_LOOP_LIMIT = 1000
 
-def updateExpectedLandingPointX(ball: Ball):
-    copyBall = Ball(False)
-    copyBall.x, copyBall.y, copyBall.x_velocity, copyBall.y_velocity = ball.x, ball.y, ball.x_velocity, ball.y_velocity
-
-    loopCounter = 0
-
-    while True:
-        loopCounter += 1
-
-        futureCopyBallX = copyBall.x_velocity + copyBall.x
-        if futureCopyBallX < BALL_RADIUS or futureCopyBallX > GROUND_WIDTH:
-            copyBall.x_velocity = -copyBall.x_velocity
-        
-        if copyBall.y + copyBall.y_velocity < 0:
-            copyBall.y_velocity = 1
-
-        # If copy ball touches net
-        if abs(copyBall.x - GROUND_HALF_WIDTH) < NET_PILLAR_HALF_WIDTH and copyBall.y > NET_PILLAR_TOP_TOP_Y_COORD:
-        # It maybe should be <= NET_PILLAR_TOP_BOTTOM_Y_COORD as in FUN_00402dc0, is it the original game author's mistake?
-            if copyBall.y < NET_PILLAR_TOP_BOTTOM_Y_COORD:
-                if copyBall.y_velocity > 0:
-                    copyBall.y_velocity = -copyBall.y_velocity
-            
-            else :
-                if (copyBall.x < GROUND_HALF_WIDTH) :
-                    copyBall.x_velocity = -abs(copyBall.x_velocity)
-                else :
-                    copyBall.x_velocity = abs(copyBall.x_velocity)
-
-        copyBall.y = copyBall.y + copyBall.y_velocity
-        # if copyBall would touch ground
-        if copyBall.y > BALL_TOUCHING_GROUND_Y_COORD or loopCounter >= INFINITE_LOOP_LIMIT:
-            break
-        
-        copyBall.x = copyBall.x + copyBall.x_velocity
-        copyBall.y_velocity += 1
-    
-    ball.expected_landing_point_x = copyBall.x
-    
-
-
 def expectedLandingPointXWhenPowerHit(x_dir, y_dir, ball: Ball):
     copyBall = Ball(False)
     copyBall.x, copyBall.y, copyBall.x_velocity, copyBall.y_velocity = ball.x, ball.y, ball.x_velocity, ball.y_velocity
@@ -114,8 +73,7 @@ def old_ai_act(env: PikachuVolleyballMultiEnv, isPlayer2):
     else:
         AI_player, other_player = env.engine.players
             
-    # Update Landing Point and Boldness
-    updateExpectedLandingPointX(env.engine.ball)
+    # Update Boldness
     AI_player.computer_boldness = random.randrange(32768) % 5
 
     # First assume it's target is the x pt of ball
