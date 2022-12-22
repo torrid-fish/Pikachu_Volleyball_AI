@@ -28,13 +28,15 @@ class Player:
             self.model = Dueling_D3QN((304, 432), 18)
             try:
                 self.model.load_state_dict(torch.load(PATH))
+                print("Model loaded sucessfully.")
             except FileNotFoundError:
                 self.model = Dueling_D3QN((304, 432), 18)
+                print("Create a new model.")
 
 
     ## Public member ##
 
-    def get_act(self, env: PikachuVolleyballMultiEnv = None):
+    def get_act(self, env: PikachuVolleyballMultiEnv = None, state: np.ndarray = None):
         """
         This function will return the next movement of the player.
         ## return
@@ -51,7 +53,7 @@ class Player:
             action = 0
 
         elif self.mode == "D3QN": 
-            action = d3qn_act(self.isPlayer2, env.engine.viewer.get_screen_rgb_array(), self.model)
+            action = d3qn_act(self.isPlayer2, state, self.model)
 
         elif self.mode == "Old_AI":
             action = old_ai_act(env, self.isPlayer2)

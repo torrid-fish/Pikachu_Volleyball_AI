@@ -6,11 +6,9 @@ from player import Player
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_agg import FigureCanvasAgg
-from gym_pikachu_volleyball.envs.pikachu_volleyball import PikachuVolleyballMultiEnv
-from gym_pikachu_volleyball.envs.constants import *
-
-
-
+from gym_pikachu_volleyball import *
+from gym_pikachu_volleyball.envs.common import convert_to_user_input
+from Actions.Old_AI_Action import *
 
 class Game:
     """
@@ -56,9 +54,11 @@ class Game:
         self.beg_time = time.perf_counter()
         self.score, self.lose_pt = [], []
         self.P2win, self.tot = 0, 0
-        self.reward = 0
         self.last_time = time.perf_counter()
-        self.the_loss = 0
+        self.loss = 0
+        self.losses = []
+        self.reward = 0
+        self.rewards = []
         
 
         # Create and reset the environment
@@ -72,7 +72,7 @@ class Game:
             self.sx, self.sy = 0, 0
             self.screen = pygame.display.set_mode((self.resolution_ratio * 432, self.resolution_ratio * 304))
         else:
-            self.resolution_ratio = 1
+            self.resolution_ratio = 1.3
             self.sx, self.sy = 30, 30
             self.screen = pygame.display.set_mode((1060 * self.resolution_ratio, 304 * self.resolution_ratio + 2 * 30))
 
@@ -163,7 +163,8 @@ class Game:
         f'P1 win rate: {1 - self.P2win / self.tot if self.tot else 0:.2f}',
         f'P2 win: {self.P2win}',
         f'P2 win rate: {self.P2win / self.tot if self.tot else 0:.2f}',
-        f'loss: {self.the_loss:.2f}']
+        f'loss: {self.loss:.2f}',
+        f'reward: {self.reward:.2f}']
         
         self.last_time = time.perf_counter()
         cnt = 0 
@@ -210,12 +211,22 @@ class Game:
                 self.fps = 10
                 # Draw plot
                 fig = Figure()
-                ax1 = fig.add_subplot(1, 1, 1)
+                # Plot P2 win rate
+                ax1 = fig.add_subplot(3, 1, 1)
                 ax1.plot(self.score)
                 ax1.set_ylim(0, 1.1)
                 ax1.set_title('P2 Win rate')
-                ax1.set_xlabel('Round')
-                ax1.set_ylabel('Ratio')
+                # Plot final reward value
+                ax2 = fig.add_subplot(3, 1, 2)
+                ax2.plot(self.rewards)
+                ax2.set_title('Reward')
+                # Plot final reward value
+                ax3 = fig.add_subplot(3, 1, 3)
+                ax3.plot(self.losses)
+                ax3.set_title('Loss')
+                ax3.set_xlabel('Round')
+                # Set padding
+                fig.tight_layout(pad=0.5)
                 self.__draw_figure(fig)
                 # Reset
                 self.env.reset(options={'is_player2_serve': self.is_player2_win})
@@ -278,6 +289,104 @@ class Game:
                 self.fps = 35
                 self.counter = 0
 
+    def __get_reward_depends_on_power_hit(self, P2_act):
+        player, ball, theOtherPlayer, userInput = self.env.engine.players[1], self.env.engine.ball, self.env.engine.players[0], convert_to_user_input(P2_act, 1)
+        y_dirs = [-1, 0, 1] if random.randrange(2) else [1, 0, -1]
+
+        for xDirection in [1, 0]:
+            for yDirection in y_dirs:
+                expected_landing_point_x = expectedLandingPointXWhenPowerHit(xDirection, yDirection, ball)
+                if (expected_landing_point_x <= int(player.is_player2) * GROUND_HALF_WIDTH or\
+                    expected_landing_point_x >= int(player.is_player2) * GROUND_WIDTH + GROUND_HALF_WIDTH) and\
+                    abs(expected_landing_point_x - theOtherPlayer.x) > PLAYER_LENGTH:
+                        reward = int(userInput.x_direction == xDirection) +\
+                                int(userInput.y_direction == yDirection) +\
+                                int(userInput.power_hit == True)
+                        return reward / 100, True
+        return int(userInput.power_hit == False) / 100, False
+
+    def __get_reward_by_user_input(self, P2_act):
+        player, ball, theOtherPlayer, userInput = self.env.engine.players[1], self.env.engine.ball, self.env.engine.players[0], convert_to_user_input(P2_act, 1)
+        reward = 0 
+        virtualexpected_landing_point_x: int = ball.expected_landing_point_x
+
+        if abs(ball.x - player.x) > 100 and abs(ball.x_velocity) < 7:
+            leftBoundary: int = int(player.is_player2) * GROUND_HALF_WIDTH
+            if (ball.expected_landing_point_x <= leftBoundary or\
+            ball.expected_landing_point_x >= int(player.is_player2) * GROUND_WIDTH + GROUND_HALF_WIDTH) and\
+            player.computer_where_to_stand_by == 0:
+                virtualexpected_landing_point_x = leftBoundary + GROUND_HALF_WIDTH // 2
+
+        if abs(virtualexpected_landing_point_x - player.x) > 10:
+            reward += int(userInput.x_direction == (1 if player.x < virtualexpected_landing_point_x else -1))
+            
+        if player.y > 180 and not userInput.power_hit:
+            if abs(ball.x_velocity) < 5 and\
+            abs(ball.x - player.x) < PLAYER_HALF_LENGTH and\
+            ball.y > -36 and ball.y < 104 and ball.y_velocity > 0:
+                reward += int(userInput.y_direction == -1)
+            
+            leftBoundary: int = int(player.is_player2) * GROUND_HALF_WIDTH
+            rightBoundary: int = (int(player.is_player2) + 1) * GROUND_HALF_WIDTH
+            
+            if ball.expected_landing_point_x > leftBoundary and ball.expected_landing_point_x < rightBoundary and\
+            abs(ball.x - player.x) > 10 + PLAYER_LENGTH and\
+            ball.x > leftBoundary and ball.x < rightBoundary and ball.y > 174:
+                reward += int(userInput.power_hit == 1)
+                reward += int(userInput.x_direction == (1 if player.x < ball.x else -1))
+
+        elif player.state == 1 or player.state == 2:
+            if abs(ball.x - player.x) > 8:
+                reward += int(userInput.x_direction == (1 if player.x < ball.x else -1))
+
+            if abs(ball.x - player.x) < 48 and abs(ball.y - player.y) < 48:
+                temp_reward, shouldInputPowerHit = self.__get_reward_depends_on_power_hit(P2_act)
+                reward += temp_reward
+                if shouldInputPowerHit:
+                    reward += int(userInput.power_hit == 1)
+                    if abs(theOtherPlayer.x - player.x) < 80 and userInput.y_direction != -1:
+                        reward += int(userInput.y_direction == -1)
+        return reward / 100
+
+    def __updateexpected_landing_point_x(self, ball: Ball):
+        copyBall = Ball(False)
+        copyBall.x, copyBall.y, copyBall.x_velocity, copyBall.y_velocity = ball.x, ball.y, ball.x_velocity, ball.y_velocity
+
+        loopCounter = 0
+
+        while True:
+            loopCounter += 1
+
+            futureCopyBallX = copyBall.x_velocity + copyBall.x
+            if futureCopyBallX < BALL_RADIUS or futureCopyBallX > GROUND_WIDTH:
+                copyBall.x_velocity = -copyBall.x_velocity
+            
+            if copyBall.y + copyBall.y_velocity < 0:
+                copyBall.y_velocity = 1
+
+            # If copy ball touches net
+            if abs(copyBall.x - GROUND_HALF_WIDTH) < NET_PILLAR_HALF_WIDTH and copyBall.y > NET_PILLAR_TOP_TOP_Y_COORD:
+            # It maybe should be <= NET_PILLAR_TOP_BOTTOM_Y_COORD as in FUN_00402dc0, is it the original game author's mistake?
+                if copyBall.y < NET_PILLAR_TOP_BOTTOM_Y_COORD:
+                    if copyBall.y_velocity > 0:
+                        copyBall.y_velocity = -copyBall.y_velocity
+                
+                else :
+                    if (copyBall.x < GROUND_HALF_WIDTH) :
+                        copyBall.x_velocity = -abs(copyBall.x_velocity)
+                    else :
+                        copyBall.x_velocity = abs(copyBall.x_velocity)
+
+            copyBall.y = copyBall.y + copyBall.y_velocity
+            # if copyBall would touch ground
+            if copyBall.y > BALL_TOUCHING_GROUND_Y_COORD or loopCounter >= INFINITE_LOOP_LIMIT:
+                break
+            
+            copyBall.x = copyBall.x + copyBall.x_velocity
+            copyBall.y_velocity += 1
+        
+        ball.expected_landing_point_x = copyBall.x
+
     ## Public member ##
 
     def reset(self):
@@ -287,21 +396,18 @@ class Game:
         return state
 
     def update(self, P1_act, P2_act) -> tuple[int, list]:
+        # Update landing point
+        self.__updateexpected_landing_point_x(self.env.engine.ball)
+
         if self.mode == "Train":
             self.__update_train(P1_act, P2_act)
 
         elif self.mode == "Play":
             self.__update_play(P1_act, P2_act)
 
+        reward = self.reward + self.__get_reward_by_user_input(P2_act)
         state = (self.state[:, :, 0] + self.state[:, :, 1] + self.state[:, :, 2]) / 3
-        landing_point = self.env.engine.ball.expected_landing_point_x
-        if landing_point > GROUND_HALF_WIDTH:
-            if landing_point > GROUND_WIDTH:
-                reward = abs(self.env.engine.players[1].x - GROUND_HALF_WIDTH) / GROUND_HALF_WIDTH
-            else: 
-                reward = 1 - abs(self.env.engine.players[1].x - self.env.engine.ball.expected_landing_point_x) / GROUND_HALF_WIDTH
-        else:
-            reward = 0
-            # reward = abs(self.env.engine.players[0].x - self.env.engine.ball.expected_landing_point_x) / GROUND_HALF_WIDTH
-        reward = 0 #round(reward, 2)
-        return self.reward + reward / 1000, state, self.done
+        self.rewards += [reward]
+        self.losses += [self.loss]
+
+        return reward, state, self.done

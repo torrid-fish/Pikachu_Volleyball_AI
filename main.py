@@ -1,8 +1,8 @@
 from game import *  
 from Actions.D3QN_Action import *  
 
-mode = "Train"
-P1_mode = "Old_AI"
+mode = "Play"
+P1_mode = "D3QN"
 P2_mode = "D3QN"
 
 
@@ -13,9 +13,12 @@ if __name__ == '__main__':
     Pikachu = Game(mode, P1_mode, P2_mode, False)
 
     if mode == "Play":
+        state = Pikachu.env.engine.viewer.get_screen_rgb_array()
+        # To gray scale
+        state = (state[:, :, 0] + state[:, :, 1] + state[:, :, 2]) / 3
         # Keep update the scene.
         while True:
-            reward, state = Pikachu.update(P1.get_act(Pikachu.env), P2.get_act(Pikachu.env))
+            reward, state, done = Pikachu.update(P1.get_act(Pikachu.env, state), P2.get_act(Pikachu.env, state))
 
     elif mode == "Train":
         ## Train D3QN settings ##
@@ -33,9 +36,11 @@ if __name__ == '__main__':
         try:
             network.load_state_dict(torch.load(PATH))
             target_network.load_state_dict(torch.load(PATH))
+            print("Model loaded sucessfully.")
         except FileNotFoundError:
             network = Dueling_D3QN(n_state, n_action)
             target_network.load_state_dict(network.state_dict())
+            print("Create a new model.")
 
         # Store to GPU / CPU
         network = network.to(device)
@@ -48,12 +53,12 @@ if __name__ == '__main__':
         epoch_reward = 0
 
         # Reward gamma
-        GAMMA = 1
+        GAMMA = 0.99
         # Size of slice
-        BATH = 512
+        BATH = 32
         
         # Memory relative
-        REPLAY_MEMORY = 20
+        REPLAY_MEMORY = 2048
         BEGIN_LEARN_SIZE = 1024 # This should be smaller than `REPLAY_MEMORY` to start learning
         memory = Memory(REPLAY_MEMORY)
 
@@ -61,8 +66,8 @@ if __name__ == '__main__':
         UPDATA_TAGESTEP = 200
         learn_step = 0
 
-        # Epsilon relatife
-        epsilon = 0.2
+        # Epsilon relative
+        epsilon = 0.1
         FINAL_EPSILON = 0.00001 # Smallest epsilon
         EXPLORE = 2000000 # Controlling the epsilon
 
@@ -84,7 +89,7 @@ if __name__ == '__main__':
                     action = network.select_action(state_tensor)
 
                 # Interact with environment
-                reward, next_state, done = Pikachu.update(P1.get_act(Pikachu.env), action)
+                reward, next_state, done = Pikachu.update(P1.get_act(Pikachu.env, state), action)
 
                 # Update reward
                 episode_reward += reward
@@ -140,9 +145,9 @@ if __name__ == '__main__':
                     Q_target = rewards + GAMMA * Q_temp
                     
                     # Compute loss
-                    # loss = F.mse_loss(Q_target, Q_pred)
-                    loss = F.huber_loss(Q_target, Q_pred)
-                    Pikachu.the_loss = float(loss)
+                    loss = F.mse_loss(Q_target, Q_pred)
+                    # loss = F.huber_loss(Q_target, Q_pred)
+                    Pikachu.loss = float(loss)
 
                     optimizer.zero_grad()
                     loss.backward()
@@ -162,7 +167,7 @@ if __name__ == '__main__':
             
             epoch_reward += episode_reward
 
-            if epoch % 50 == 0:
-                print(f"{epoch/50} epoch reward : {epoch_reward / 50}", epsilon)
+            if epoch % 10 == 0:
+                print(f"{epoch/10} epoch reward : {epoch_reward / 10}", epsilon)
                 epoch_reward = 0
                 torch.save(network.state_dict(), PATH)
