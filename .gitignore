@@ -1,1 +1,2 @@
-.\model\networkdueling.pt
+.\model
+*.pt
