@@ -32,11 +32,11 @@ class Dueling_D3QN(nn.Module):
         # state_dim = torch.unsqueeze(state_dim, 0)
 
         self.conv1 = nn.Conv2d(in_channels=1, out_channels=32, kernel_size=8, stride=4) 
-        self.bn1 = nn.BatchNorm2d(32)
+        # self.bn1 = nn.BatchNorm2d(32)
         self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2) 
-        self.bn2 = nn.BatchNorm2d(64)
+        # self.bn2 = nn.BatchNorm2d(64)
         self.conv3 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1) 
-        self.bn3 = nn.BatchNorm2d(64)
+        # self.bn3 = nn.BatchNorm2d(64)
 
         self.f1 = nn.Linear(108800, 512)
 
@@ -51,15 +51,15 @@ class Dueling_D3QN(nn.Module):
         x = torch.reshape(x, (-1, 1, 304, 432)) 
 
         x = self.conv1(x)
-        x = self.bn1(x)
+        # x = self.bn1(x)
         x = F.relu(x)
         
         x = self.conv2(x)
-        x = self.bn2(x)
+        # x = self.bn2(x)
         x = F.relu(x)
 
         x = self.conv3(x)
-        x = self.bn3(x)
+        # x = self.bn3(x)
         x = F.relu(x)
 
         x = torch.flatten(x, 1)
@@ -105,9 +105,10 @@ class Memory(object):
     def size(self):
         return len(self.memory)
 
-def d3qn_act(isPlayer2: bool, state: list, model: Dueling_D3QN) -> int:
+def d3qn_act(isPlayer2: bool, state: np.ndarray, model: Dueling_D3QN) -> int:
     if not isPlayer2:
         np.flip(state, axis = 1)
-    state = torch.as_tensor(state, dtype=torch.float32)
+    state = torch.as_tensor(state, dtype=torch.float32).to(device)
+    model = model.to(device)
     # Get the model
     return model.select_action(state)

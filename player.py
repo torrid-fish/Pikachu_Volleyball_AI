@@ -32,7 +32,8 @@ class Player:
             except FileNotFoundError:
                 self.model = Dueling_D3QN((304, 432), 18)
                 print("Create a new model.")
-
+            # Set to evaluate mode
+            self.model.eval()
 
     ## Public member ##
 

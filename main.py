@@ -1,8 +1,8 @@
 from game import *  
 from Actions.D3QN_Action import *  
 
-mode = "Play"
-P1_mode = "D3QN"
+mode = "Train"
+P1_mode = "Old_AI"
 P2_mode = "D3QN"
 
 
@@ -10,7 +10,7 @@ if __name__ == '__main__':
     # Create players and game
     P1 = Player(P1_mode, False)
     P2 = Player(P2_mode, True)
-    Pikachu = Game(mode, P1_mode, P2_mode, False)
+    Pikachu = Game(mode, P1_mode, P2_mode, is_player2_serve=False)
 
     if mode == "Play":
         state = Pikachu.env.engine.viewer.get_screen_rgb_array()
@@ -18,6 +18,7 @@ if __name__ == '__main__':
         state = (state[:, :, 0] + state[:, :, 1] + state[:, :, 2]) / 3
         # Keep update the scene.
         while True:
+            # print (P1.get_act(Pikachu.env, state), P2.get_act(Pikachu.env, state))
             reward, state, done = Pikachu.update(P1.get_act(Pikachu.env, state), P2.get_act(Pikachu.env, state))
 
     elif mode == "Train":
@@ -41,6 +42,10 @@ if __name__ == '__main__':
             network = Dueling_D3QN(n_state, n_action)
             target_network.load_state_dict(network.state_dict())
             print("Create a new model.")
+        # Activate to training mode
+        print(f'network {network.training}, target_network {target_network.training}')
+        network.train()
+        target_network.train()
 
         # Store to GPU / CPU
         network = network.to(device)
@@ -74,7 +79,6 @@ if __name__ == '__main__':
         for epoch in count():
             # Reset environment
             state = Pikachu.reset()
-            episode_reward = 0
 
             # Keep learning until gain reward
             while True:
@@ -91,19 +95,17 @@ if __name__ == '__main__':
                 # Interact with environment
                 reward, next_state, done = Pikachu.update(P1.get_act(Pikachu.env, state), action)
 
-                # Update reward
-                episode_reward += reward
                 # Add experience to memory
                 memory.add(state, action, reward, next_state, done)
 
                 # Begin to learn
                 if memory.size() >= BEGIN_LEARN_SIZE:
-                    print("Learn session started")
                     learn_step += 1
 
                     # Update target network
                     if learn_step % UPDATA_TAGESTEP == 0:
                         target_network.load_state_dict(network.state_dict())
+                        # target_network.eval()
 
                     # Sample data from memory
                     states, actions, rewards, next_states, dones = memory.sample(BATH)
@@ -119,7 +121,6 @@ if __name__ == '__main__':
                     # [0, 1, 2, ..., BATH-1]       
                     indices = np.arange(BATH)
 
-                    
                     # Double D3QN: (state, action, reward, next_state)
                     #  
                     #       reward + GAMMA * QT(next_state, maxarg_a{Q(next_state, a)}) <- Q(state, action)
@@ -159,15 +160,12 @@ if __name__ == '__main__':
 
                 # Keep learning
                 if done:
-                    torch.cuda.empty_cache()
+                    # torch.cuda.empty_cache()
                     break
 
                 # Update state
                 state = next_state
-            
-            epoch_reward += episode_reward
 
             if epoch % 10 == 0:
-                print(f"{epoch/10} epoch reward : {epoch_reward / 10}", epsilon)
-                epoch_reward = 0
+                print("Network saved.")
                 torch.save(network.state_dict(), PATH)
