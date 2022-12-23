@@ -36,7 +36,8 @@ class Game:
     Currently for test mode, nothing special will be shown.
     """
     def __init__(self, mode: str, P1_mode: str, P2_mode: str, is_player2_serve: bool):
-        self.mode_list = ["Train", "Play", "Test"]
+        # Sanity check
+        self.mode_list = ["Train", "Play"]
         if mode not in self.mode_list:
             print(f'Error: {mode} is an unknown mode.')
             sys.exit()
@@ -47,7 +48,7 @@ class Game:
         self.P2_mode = P2_mode
 
         # local variables
-        self.fps = 35
+        self.fps = 120 #35
         self.status = "Play"
         self.counter = 0
         self.is_player1_win, self.is_player2_win = 0, 0
@@ -56,9 +57,9 @@ class Game:
         self.P2win, self.tot = 0, 0
         self.last_time = time.perf_counter()
         self.loss = 0
-        self.losses = []
+        self.losses = [0]
         self.reward = 0
-        self.rewards = []
+        self.rewards = [0]
         
 
         # Create and reset the environment
@@ -77,6 +78,7 @@ class Game:
             self.screen = pygame.display.set_mode((1060 * self.resolution_ratio, 304 * self.resolution_ratio + 2 * 30))
 
         pygame.display.set_caption("Pikachu Volleyball")
+
     
     ## Private member ##
 
@@ -163,8 +165,8 @@ class Game:
         f'P1 win rate: {1 - self.P2win / self.tot if self.tot else 0:.2f}',
         f'P2 win: {self.P2win}',
         f'P2 win rate: {self.P2win / self.tot if self.tot else 0:.2f}',
-        f'loss: {self.loss:.2f}',
-        f'reward: {self.reward:.2f}']
+        f'loss: {self.loss:.6f}',
+        f'reward: {self.rewards[-1]:.6f}']
         
         self.last_time = time.perf_counter()
         cnt = 0 
@@ -177,6 +179,7 @@ class Game:
         # Move to next state
         action = [P1_act, P2_act]
         self.state, self.reward, self.done, _, _ = self.env.step(action)   
+
 
         ### Begin: Draw infomations ###
         # self.__draw_background()
@@ -228,9 +231,6 @@ class Game:
                 # Set padding
                 fig.tight_layout(pad=0.5)
                 self.__draw_figure(fig)
-                # Reset
-                self.env.reset(options={'is_player2_serve': self.is_player2_win})
-                self.is_player1_win, self.is_player2_win = 0, 0
 
     def __update_play(self, P1_act, P2_act):
         # Move to next state
@@ -291,7 +291,7 @@ class Game:
 
     def __get_reward_depends_on_power_hit(self, P2_act):
         player, ball, theOtherPlayer, userInput = self.env.engine.players[1], self.env.engine.ball, self.env.engine.players[0], convert_to_user_input(P2_act, 1)
-        y_dirs = [-1, 0, 1] if random.randrange(2) else [1, 0, -1]
+        y_dirs = [0, -1, 1] if random.randrange(2) else [1, 0, -1]
 
         for xDirection in [1, 0]:
             for yDirection in y_dirs:
@@ -391,7 +391,8 @@ class Game:
 
     def reset(self):
         # Return reset status
-        state = self.env.reset(options={'is_player2_serve': False})
+        state = self.env.reset(options={'is_player2_serve': self.is_player2_win})
+        self.is_player1_win, self.is_player2_win = 0, 0
         state = (state[:, :, 0] + state[:, :, 1] + state[:, :, 2]) / 3
         return state
 

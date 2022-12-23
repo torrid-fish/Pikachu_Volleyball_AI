@@ -1,7 +1,7 @@
 from game import *  
 from Actions.D3QN_Action import *  
 
-mode = "Train"
+mode = "Play"
 P1_mode = "Old_AI"
 P2_mode = "D3QN"
 
@@ -12,9 +12,14 @@ if __name__ == '__main__':
     Pikachu = Game(mode, P1_mode, P2_mode, False)
 
     if mode == "Play":
+        state = Pikachu.env.engine.viewer.get_screen_rgb_array()
+        # To gray scale
+        state = (state[:, :, 0] + state[:, :, 1] + state[:, :, 2]) / 3
         # Keep update the scene.
         while True:
-            reward, state = Pikachu.update(P1.get_act(Pikachu.env), P2.get_act(Pikachu.env))
+            # print (P1.get_act(Pikachu.env, state), P2.get_act(Pikachu.env, state))
+            reward, state, done = Pikachu.update(P1.get_act(Pikachu.env, state), P2.get_act(Pikachu.env, state))
+
 
     elif mode == "Train":
         ## Train D3QN settings ##
@@ -49,21 +54,21 @@ if __name__ == '__main__':
         # Reward gamma
         GAMMA = 0.99
         # Size of slice
-        BATH = 64
+        BATH = 128
         
         # Memory relative
         REPLAY_MEMORY = 4096
-        BEGIN_LEARN_SIZE = 128 # This should be smaller than `REPLAY_MEMORY` to start learning
+        BEGIN_LEARN_SIZE = 256 # This should be smaller than `REPLAY_MEMORY` to start learning
         memory = PER(REPLAY_MEMORY)
 
         # Number of times to update target network
-        UPDATA_TAGESTEP = 50
+        UPDATA_TAGESTEP = 10
         learn_step = 0
 
         # Epsilon relatife
-        epsilon = 0.2
-        FINAL_EPSILON = 0.001 # Smallest epsilon
-        EXPLORE = 2000 # Controlling the epsilon
+        epsilon = 0.3
+        FINAL_EPSILON = 0.00001 # Smallest epsilon
+        EXPLORE = 200000 # Controlling the epsilon
 
         for epoch in count():
             # Reset environment
@@ -91,16 +96,16 @@ if __name__ == '__main__':
 
                 ### add trans
                 target = network(torch.FloatTensor(state).to(device))
-                old_val = target[action]
+                old_val = target[0][action]
                 target_val = target_network(torch.FloatTensor(next_state).to(device))
                 target_next = network(torch.FloatTensor(next_state).to(device))
                 if done:
-                    target[action] = reward
+                    target[0][action] = reward
                 else:
                     a = np.argmax(target_next.data.cpu().numpy())
-                    target[action] = reward + GAMMA * target_val[a]
+                    target[0][action] = reward + GAMMA * target_val[0][a]
                 
-                td_error = abs(old_val - target[action])
+                td_error = abs(old_val - target[0][action])
 
                 memory.add(td_error, (state, action, reward, next_state, done))
                 ###
@@ -132,7 +137,6 @@ if __name__ == '__main__':
                     # [0, 1, 2, ..., BATH-1]       
                     indices = np.arange(BATH)
 
-                    
                     # Double D3QN: (state, action, reward, next_state)
                     #  
                     #       reward + GAMMA * QT(next_state, maxarg_a{Q(next_state, a)}) <- Q(state, action)
@@ -175,7 +179,7 @@ if __name__ == '__main__':
 
                     # Update epsilon
                     if epsilon > FINAL_EPSILON: 
-                        epsilon -= (0.2 - FINAL_EPSILON) / EXPLORE
+                        epsilon -= (0.3 - FINAL_EPSILON) / EXPLORE
 
                 # Keep learning
                 if done:

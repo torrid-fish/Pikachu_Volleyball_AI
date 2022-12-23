@@ -42,22 +42,31 @@ class Dueling_D3QN(nn.Module):
         # state_dim = torch.tensor(state_dim).to(device)
         # state_dim = torch.unsqueeze(state_dim, 0)
 
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=32, kernel_size=8, stride=4) 
+        self.conv1 = Conv2d(in_channels=1, out_channels=32, kernel_size=8, stride=4) 
         self.g1 = nn.GroupNorm(4, 32)
         self.m1 = nn.AvgPool2d(3, stride=2)
-        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2) 
+        self.conv2 = Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2) 
         self.g2 = nn.GroupNorm(4, 64)
-        self.conv3 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1) 
+        self.m2 = nn.MaxPool2d(3, stride=1)
+        self.conv3 = Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1) 
         self.g3 = nn.GroupNorm(4, 64)
 
-        self.f1 = nn.Linear(22080, 1024)
+        self.f1 = nn.Linear(17472, 1024)
 
-        self.val_hidden = nn.Linear(1024, 128)
-        self.adv_hidden = nn.Linear(1024, 128)
+        self.val_hidden = nn.Linear(1024, 256)
+        self.adv_hidden = nn.Linear(1024, 256)
 
-        self.val = nn.Linear(128, 1) # State value
+        self.val = nn.Linear(256, 1) # State value
 
-        self.adv = nn.Linear(128, action_dim) # Advantage value
+        self.adv = nn.Linear(256, action_dim) # Advantage value
+
+        torch.nn.init.normal_(self.conv1.weight, 0, 0.02)
+        torch.nn.init.normal_(self.conv2.weight, 0, 0.02)
+        torch.nn.init.normal_(self.conv3.weight, 0, 0.02)
+        torch.nn.init.normal_(self.val_hidden.weight, 0, 0.02)
+        torch.nn.init.normal_(self.val.weight, 0, 0.02)
+        torch.nn.init.normal_(self.adv_hidden.weight, 0, 0.02)
+        torch.nn.init.normal_(self.adv.weight, 0, 0.02)
 
     def forward(self, x):
         x = torch.reshape(x, (-1, 1, 304, 432)) 
@@ -71,6 +80,8 @@ class Dueling_D3QN(nn.Module):
         x = self.conv2(x)
         x = self.g2(x)
         x = F.relu(x)
+
+        x = self.m2(x)
 
         x = self.conv3(x)
         x = self.g3(x)
@@ -88,13 +99,11 @@ class Dueling_D3QN(nn.Module):
         adv_hidden = F.relu(adv_hidden)
 
         val = self.val(val_hidden)
-
         adv = self.adv(adv_hidden)
-
-        adv_ave = torch.mean(adv)
-
+        
+        adv_ave = torch.mean(adv, axis=1, keepdims=True)
         x = adv + val - adv_ave
-        x = x.squeeze(0) 
+        #print(x.shape, adv.shape, val.shape, adv_ave.shape)
         return x
 
     def select_action(self, state):
@@ -168,9 +177,13 @@ class PER:  # stored as ( s, a, r, s_ ) in SumTree
     def size(self):
         return self.tree.n_entries
 
-def d3qn_act(isPlayer2: bool, state: list, model: Dueling_D3QN) -> int:
+def d3qn_act(isPlayer2: bool, state: np.ndarray, model: Dueling_D3QN) -> int:
+    if not isPlayer2:
+        np.flip(state, axis = 1)
+    state = torch.as_tensor(state, dtype=torch.float32).to(device)
+    model = model.to(device)
     # Get the model
-    return model.select_action(torch(state))
+    return model.select_action(state)
 
 class SumTree:
     write = 0
