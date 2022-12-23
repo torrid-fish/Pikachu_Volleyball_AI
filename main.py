@@ -9,7 +9,7 @@ MODE = "Train"
 # STATE_MODE = "gray_scale" 
 STATE_MODE = "info_vector"
 
-P1_mode = "Old_AI"
+P1_mode = "Human"
 P2_mode = "D3QN"
 
 
@@ -57,7 +57,7 @@ if __name__ == '__main__':
         target_network = target_network.to(device)
 
         # Gradiant Optimizer ADAM
-        optimizer = torch.optim.Adam(network.parameters(), lr=0.001)
+        optimizer = torch.optim.Adam(network.parameters(), lr=0.01)
         
         # Record variables
         epoch_reward = 0
@@ -77,9 +77,10 @@ if __name__ == '__main__':
         learn_step = 0
 
         # Epsilon relatife
-        epsilon = 0.3
-        FINAL_EPSILON = 0.00001 # Smallest epsilon
-        EXPLORE = 20000 # Controlling the epsilon
+        BEGIN_EPSILON = 0.2
+        epsilon = BEGIN_EPSILON
+        FINAL_EPSILON = 0.001 # Smallest epsilon
+        EXPLORE = 25000 # Controlling the epsilon
 
         for epoch in count():
             # Reset environment
@@ -95,6 +96,10 @@ if __name__ == '__main__':
                 else: # Use model to predict next action
                     state_tensor = torch.as_tensor(state, dtype=torch.float32).to(device)
                     action = network.select_action(state_tensor)
+
+                # Update epsilon
+                if epsilon > FINAL_EPSILON: 
+                    epsilon -= (BEGIN_EPSILON - FINAL_EPSILON) / EXPLORE
 
                 # Interact with environment
                 reward, next_state, done = Pikachu.update(P1.get_act(Pikachu.env), action)
@@ -187,10 +192,6 @@ if __name__ == '__main__':
                     optimizer.zero_grad()
                     loss.backward()
                     optimizer.step() 
-
-                    # Update epsilon
-                    if epsilon > FINAL_EPSILON: 
-                        epsilon -= (0.3 - FINAL_EPSILON) / EXPLORE
 
                 # Keep learning
                 if done:

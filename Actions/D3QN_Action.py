@@ -219,15 +219,15 @@ def d3qn_act(isPlayer2: bool, state, model: Dueling_D3QN) -> int:
                 ball.x, ball.y, ball.x_velocity, ball.y_velocity, ball.is_power_hit
             ])
             """
-            # P1.x, P1.y = GROUND_WIDTH - P2.x, P2.y
-            state[0], state[1] = GROUND_WIDTH - temp[6], temp[7]
-            # P2.x, P2.y = GROUND_WIDTH - P1.x, P1.y
-            state[6], state[7] = GROUND_WIDTH - temp[0], temp[1]
+            # P1.x, P1.y = 1 - P2.x, P2.y
+            state[0], state[1] = 1 - temp[6], temp[7]
+            # P2.x, P2.y = 1 - P1.x, P1.y
+            state[6], state[7] = 1 - temp[0], temp[1]
             # swap(state[2:6], state[8:12])
             state[2], state[3], state[4], state[5] = temp[8], temp[9], temp[10], temp[11]
             state[8], state[9], state[10], state[11] = temp[2], temp[3], temp[4], temp[5]
-            # ball.x = GROUND_WIDTH - ball.x
-            state[12] = GROUND_WIDTH - temp[12]
+            # ball.x = 1 - ball.x
+            state[12] = 1 - temp[12]
             # ball.y = ball.y
             state[13] = temp[13]
             # ball.x_velocity = -ball.x_velocity
