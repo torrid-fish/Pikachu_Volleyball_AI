@@ -1,7 +1,14 @@
 from game import *  
 from Actions.D3QN_Action import *  
+from itertools import count
+from torchsummary import summary
 
-mode = "Train"
+MODE = "Train"
+# MODE = "Play"
+
+# STATE_MODE = "gray_scale" 
+STATE_MODE = "info_vector"
+
 P1_mode = "Old_AI"
 P2_mode = "D3QN"
 
@@ -10,42 +17,40 @@ if __name__ == '__main__':
     # Create players and game
     P1 = Player(P1_mode, False)
     P2 = Player(P2_mode, True)
-    Pikachu = Game(mode, P1_mode, P2_mode, is_player2_serve=False)
+    Pikachu = Game(MODE, P1_mode, P2_mode)
 
-    if mode == "Play":
-        state = Pikachu.env.engine.viewer.get_screen_rgb_array()
-        # To gray scale
-        state = (state[:, :, 0] + state[:, :, 1] + state[:, :, 2]) / 3
+    if MODE == "Play":
+        # Get initial state
+        state = Pikachu.reset(True)
+    
         # Keep update the scene.
         while True:
-            # print (P1.get_act(Pikachu.env, state), P2.get_act(Pikachu.env, state))
             reward, state, done = Pikachu.update(P1.get_act(Pikachu.env, state), P2.get_act(Pikachu.env, state))
 
-    elif mode == "Train":
+    elif MODE == "Train":
         ## Train D3QN settings ##
         
         # IO dimension
-        n_state = Pikachu.env.observation_space.shape[0:2] # Input shape (304, 432)
         n_action = 18 # Output shape (1, 18)
 
         # Initialize two models
-        target_network = Dueling_D3QN(n_state, n_action)
-        network = Dueling_D3QN(n_state, n_action)
+        target_network = Dueling_D3QN(n_action)
+        network = Dueling_D3QN(n_action)
         
         # Load in previous variables
-        PATH = './model/networkdueling.pt' # The path of stored model
+        if STATE_MODE == "gray_scale":
+            PATH = './model/D3QN_SMGS.pt' 
+        elif STATE_MODE == "info_vector":
+            PATH = './model/D3QN_SMIV.pt' 
+            
         try:
             network.load_state_dict(torch.load(PATH))
             target_network.load_state_dict(torch.load(PATH))
-            print("Model loaded sucessfully.")
         except FileNotFoundError:
-            network = Dueling_D3QN(n_state, n_action)
+            network = Dueling_D3QN(n_action)
             target_network.load_state_dict(network.state_dict())
-            print("Create a new model.")
-        # Activate to training mode
-        print(f'network {network.training}, target_network {target_network.training}')
-        network.train()
-        target_network.train()
+
+        summary(network)
 
         # Store to GPU / CPU
         network = network.to(device)
@@ -60,30 +65,29 @@ if __name__ == '__main__':
         # Reward gamma
         GAMMA = 0.99
         # Size of slice
-        BATH = 32
+        BATH = 64
         
         # Memory relative
-        REPLAY_MEMORY = 2048
-        BEGIN_LEARN_SIZE = 1024 # This should be smaller than `REPLAY_MEMORY` to start learning
-        memory = Memory(REPLAY_MEMORY)
+        REPLAY_MEMORY = 4096
+        BEGIN_LEARN_SIZE = 256 # This should be smaller than `REPLAY_MEMORY` to start learning
+        memory = PER(REPLAY_MEMORY)
 
         # Number of times to update target network
-        UPDATA_TAGESTEP = 200
+        UPDATA_TAGESTEP = 10
         learn_step = 0
 
-        # Epsilon relative
-        epsilon = 0.1
+        # Epsilon relatife
+        epsilon = 0.3
         FINAL_EPSILON = 0.00001 # Smallest epsilon
-        EXPLORE = 2000000 # Controlling the epsilon
+        EXPLORE = 20000 # Controlling the epsilon
 
         for epoch in count():
             # Reset environment
-            state = Pikachu.reset()
+            state = Pikachu.reset(True)
+            episode_reward = 0
 
             # Keep learning until gain reward
             while True:
-                # Normalize data
-                state = state / 255
                 
                 p = random.random()
                 if p < epsilon: # Choose random action
@@ -93,30 +97,53 @@ if __name__ == '__main__':
                     action = network.select_action(state_tensor)
 
                 # Interact with environment
-                reward, next_state, done = Pikachu.update(P1.get_act(Pikachu.env, state), action)
+                reward, next_state, done = Pikachu.update(P1.get_act(Pikachu.env), action)
 
+                # Update reward
+                episode_reward += reward
                 # Add experience to memory
-                memory.add(state, action, reward, next_state, done)
+
+                ### add trans
+                #if STATE_MODE == "gray_code":
+
+
+                #elif STATE_MODE == "info_vector":
+                target = network(torch.FloatTensor(state).to(device))
+                old_val = target[0][action]
+                target_val = target_network(torch.FloatTensor(next_state).to(device))
+                target_next = network(torch.FloatTensor(next_state).to(device))
+                if done:
+                    target[0][action] = reward
+                else:
+                    a = np.argmax(target_next.data.cpu().numpy())
+                    target[0][action] = reward + GAMMA * target_val[0][a]
+                
+                td_error = abs(old_val - target[0][action])
+
+                memory.add(td_error, (state, action, reward, next_state, done))
+                # memory.add(state, action, reward, next_state, done)
 
                 # Begin to learn
                 if memory.size() >= BEGIN_LEARN_SIZE:
+                    #print("Learn session started")
                     learn_step += 1
 
                     # Update target network
                     if learn_step % UPDATA_TAGESTEP == 0:
                         target_network.load_state_dict(network.state_dict())
-                        # target_network.eval()
 
                     # Sample data from memory
-                    states, actions, rewards, next_states, dones = memory.sample(BATH)
+                    #states, actions, rewards, next_states, dones 
+                    mini_batch, idxs, is_weights = memory.sample(BATH)
+                    mini_batch = np.array(mini_batch).transpose()
 
                     # Put parameters to GPU / CPU
-                    states = torch.FloatTensor(np.array(states)).to(device)
-                    actions = torch.LongTensor(actions).to(device)
-                    rewards = torch.FloatTensor(rewards).to(device)
-                    next_states = torch.FloatTensor(np.array(next_states)).to(device)
+                    states = torch.FloatTensor(np.vstack(mini_batch[0])).to(device)
+                    actions = torch.LongTensor(list(mini_batch[1])).to(device)
+                    rewards = torch.FloatTensor(list(mini_batch[2])).to(device)
+                    next_states = torch.FloatTensor(np.vstack(mini_batch[3])).to(device)
                     ###dones = torch.FloatTensor(np.array(dones)).to(device)
-                    dones = torch.LongTensor(np.array(dones)).to(device)
+                    dones = torch.LongTensor(mini_batch[4].astype(int)).to(device)
 
                     # [0, 1, 2, ..., BATH-1]       
                     indices = np.arange(BATH)
@@ -146,8 +173,15 @@ if __name__ == '__main__':
                     Q_target = rewards + GAMMA * Q_temp
                     
                     # Compute loss
-                    loss = F.mse_loss(Q_target, Q_pred)
-                    # loss = F.huber_loss(Q_target, Q_pred)
+                    # loss = F.mse_loss(Q_target, Q_pred)
+                    loss = (torch.FloatTensor(is_weights).to(device) * F.huber_loss(Q_target, Q_pred)).mean()
+                    #loss = F.huber_loss(Q_target, Q_pred)
+                    errors = torch.abs(Q_target - Q_pred).data.to(device)
+
+                    for i in range(BATH):
+                        idx = idxs[i]
+                        memory.update(idx, errors[i])
+
                     Pikachu.loss = float(loss)
 
                     optimizer.zero_grad()
@@ -156,16 +190,21 @@ if __name__ == '__main__':
 
                     # Update epsilon
                     if epsilon > FINAL_EPSILON: 
-                        epsilon -= (0.1 - FINAL_EPSILON) / EXPLORE
+                        epsilon -= (0.3 - FINAL_EPSILON) / EXPLORE
 
                 # Keep learning
                 if done:
-                    # torch.cuda.empty_cache()
+                    torch.cuda.empty_cache()
                     break
 
                 # Update state
                 state = next_state
+            
+            epoch_reward += episode_reward
 
-            if epoch % 10 == 0:
-                print("Network saved.")
+            if epoch % UPDATA_TAGESTEP == 0 and epoch != 0:
+                print(f"{epoch} epoch reward : {epoch_reward / UPDATA_TAGESTEP}")
+                print(f"{epoch} epoch loss : {loss}")
+                print("Model saved!")
+                epoch_reward = 0
                 torch.save(network.state_dict(), PATH)

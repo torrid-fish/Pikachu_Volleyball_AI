@@ -9,6 +9,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from gym_pikachu_volleyball import *
 from gym_pikachu_volleyball.envs.common import convert_to_user_input
 from Actions.Old_AI_Action import *
+from main import STATE_MODE
 
 class Game:
     """
@@ -35,7 +36,7 @@ class Game:
     ### Test
     Currently for test mode, nothing special will be shown.
     """
-    def __init__(self, mode: str, P1_mode: str, P2_mode: str, is_player2_serve: bool):
+    def __init__(self, mode: str, P1_mode: str, P2_mode: str):
         # Sanity check
         self.mode_list = ["Train", "Play"]
         if mode not in self.mode_list:
@@ -48,7 +49,8 @@ class Game:
         self.P2_mode = P2_mode
 
         # local variables
-        self.fps = 120 #35
+        self.peak_fps = 120
+        self.fps = self.peak_fps    
         self.status = "Play"
         self.counter = 0
         self.is_player1_win, self.is_player2_win = 0, 0
@@ -64,7 +66,8 @@ class Game:
 
         # Create and reset the environment
         self.env = PikachuVolleyballMultiEnv(render_mode=None)
-        self.state = self.env.reset(return_info=True, options={'is_player2_serve': is_player2_serve})
+        # The secene of the back ground
+        self.scene = self.env.reset(return_info=True, options={'is_player2_serve': True})
 
         # Initialize pygame
         pygame.init()
@@ -86,14 +89,14 @@ class Game:
         # Draw result depends on state
         if self.mode == "Train" or self.status == "Play" or (self.status == "Trans" and self.counter >= 10):
             # Draw background
-            base_surface = pygame.surfarray.make_surface(self.state.transpose((1, 0, 2)))
+            base_surface = pygame.surfarray.make_surface(self.scene.transpose((1, 0, 2)))
             base_surface = pygame.transform.scale(base_surface, (self.resolution_ratio * 432, self.resolution_ratio * 304))
             self.screen.blit(base_surface, (self.sx, self.sy))
 
         elif self.status == "End" or (self.status == "Trans" and self.counter < 10):
             # Draw background in a reverse color manner
-            self.state = 255 - self.state
-            base_surface = pygame.surfarray.make_surface(self.state.transpose((1, 0, 2)))
+            self.scene = 255 - self.scene
+            base_surface = pygame.surfarray.make_surface(self.scene.transpose((1, 0, 2)))
             base_surface = pygame.transform.scale(base_surface, (self.resolution_ratio * 432, self.resolution_ratio * 304))
             self.screen.blit(base_surface, (self.sx, self.sy))
 
@@ -178,7 +181,7 @@ class Game:
     def __update_train(self, P1_act, P2_act):
         # Move to next state
         action = [P1_act, P2_act]
-        self.state, self.reward, self.done, _, _ = self.env.step(action)   
+        self.scene, self.reward, self.done, _, _ = self.env.step(action)   
 
 
         ### Begin: Draw infomations ###
@@ -238,7 +241,7 @@ class Game:
             action = [P1_act, P2_act]
         else:
             action = [7, 7] # Stand still
-        self.state, self.reward, self.done, _, _ = self.env.step(action)   
+        self.scene, self.reward, self.done, _, _ = self.env.step(action)   
 
         ### Begin: Draw infomations ###
         self.__draw_background()
@@ -282,11 +285,11 @@ class Game:
         
         elif self.status == "Trans":
             if self.counter > 10:
-                self.env.reset(options={'is_player2_serve': self.is_player2_win})
+                self.reset(False)
             if self.counter == 20:
                 self.is_player1_win, self.is_player2_win = 0, 0
                 self.status = "Play"
-                self.fps = 35
+                self.fps = self.peak_fps
                 self.counter = 0
 
     def __get_reward_depends_on_power_hit(self, P2_act):
@@ -387,16 +390,42 @@ class Game:
         
         ball.expected_landing_point_x = copyBall.x
 
+    def __cal_state(self):
+        if STATE_MODE == "gray_scale":
+            # Turn scene into gray scale
+            state = (self.scene[:, :, 0] + self.scene[:, :, 1] + self.scene[:, :, 2]) / 3
+            # Normalize data
+            state = state / 255
+        elif STATE_MODE == "info_vector":
+            # Generate info vector
+            P1 = self.env.engine.players[0]
+            P2 = self.env.engine.players[1]
+            ball = self.env.engine.ball
+            state = np.array([
+                P1.x, P1.y, P1.y_velocity, P1.state, P1.diving_direction, P1.lying_down_duration_left,
+                P2.x, P2.y, P2.y_velocity, P2.state, P2.diving_direction, P2.lying_down_duration_left,
+                ball.x, ball.y, ball.x_velocity, ball.y_velocity, ball.is_power_hit
+            ])
+        return state
+
     ## Public member ##
 
-    def reset(self):
-        # Return reset status
-        state = self.env.reset(options={'is_player2_serve': self.is_player2_win})
-        self.is_player1_win, self.is_player2_win = 0, 0
-        state = (state[:, :, 0] + state[:, :, 1] + state[:, :, 2]) / 3
+    def reset(self, reset: bool):
+        """
+        This function will return the initial state.
+        """
+        # Reset and cal state
+        self.scene = self.env.reset(options={'is_player2_serve': self.is_player2_win})
+        state = self.__cal_state()
+        # Reset who win
+        if reset:
+            self.is_player1_win, self.is_player2_win = 0, 0
         return state
 
     def update(self, P1_act, P2_act) -> tuple[int, list]:
+        """
+        This function will return `reward, next_state, done`.
+        """
         # Update landing point
         self.__updateexpected_landing_point_x(self.env.engine.ball)
 
@@ -406,9 +435,9 @@ class Game:
         elif self.mode == "Play":
             self.__update_play(P1_act, P2_act)
 
+        # Add small rewards
         reward = self.reward + self.__get_reward_by_user_input(P2_act)
-        state = (self.state[:, :, 0] + self.state[:, :, 1] + self.state[:, :, 2]) / 3
         self.rewards += [reward]
         self.losses += [self.loss]
 
-        return reward, state, self.done
+        return reward, self.__cal_state(), self.done

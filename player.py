@@ -4,6 +4,7 @@ from Actions.Old_AI_Action import old_ai_act
 from Actions.Human_Action import human_act
 from Actions.D3QN_Action import *
 from gym_pikachu_volleyball.envs import PikachuVolleyballMultiEnv
+from main import STATE_MODE
 
 class Player:
     """
@@ -23,14 +24,18 @@ class Player:
         self.isPlayer2 = isPlayer2
         
         if player == "D3QN":
-            # Import used model
-            PATH = './model/networkdueling.pt' # The path of stored model
-            self.model = Dueling_D3QN((304, 432), 18)
+            # Load in previous variables
+            if STATE_MODE == "gray_scale":
+                PATH = './model/D3QN_SMGS.pt' 
+            elif STATE_MODE == "info_vector":
+                PATH = './model/D3QN_SMIV.pt' 
+
+            self.model = Dueling_D3QN(18)
             try:
                 self.model.load_state_dict(torch.load(PATH))
                 print("Model loaded sucessfully.")
             except FileNotFoundError:
-                self.model = Dueling_D3QN((304, 432), 18)
+                self.model = Dueling_D3QN(18)
                 print("Create a new model.")
             # Set to evaluate mode
             self.model.eval()
