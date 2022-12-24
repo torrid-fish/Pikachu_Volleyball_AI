@@ -134,7 +134,7 @@ if __name__ == '__main__':
 
                     if PER_ENABLE:
                         # Sample data from memory
-                        mini_batch, idxs, is_weights = memory.sample(BATH)
+                        idxs, mini_batch = memory.sample(BATH)
                         mini_batch = np.array(mini_batch, dtype=object).transpose()
                         # Put parameters to GPU / CPU
                         states = torch.FloatTensor(np.vstack(mini_batch[0])).to(device)
@@ -179,19 +179,16 @@ if __name__ == '__main__':
                     Q_temp[dones] = 0
                     Q_target = rewards + GAMMA * Q_temp
                     
-                    # Compute loss
-                    if PER_ENABLE:
-                        # loss = F.mse_loss(Q_target, Q_pred)
-                        loss = (torch.FloatTensor(is_weights).to(device) * F.huber_loss(Q_target, Q_pred)).mean()
-                        errors = torch.abs(Q_target - Q_pred).data.to(device)
+                    
+                    # loss = F.mse_loss(Q_target, Q_pred)
+                    loss = F.huber_loss(Q_target, Q_pred)
 
+                    # Update priority in sum tree
+                    if PER_ENABLE:
+                        errors = np.abs((Q_target - Q_pred).data.cpu().numpy())
                         # Update priority in ReplayBuffer
-                        for i in range(BATH):
-                            memory.batch_update(idxs[i], errors[i])
-                    else:
-                        # loss = F.mse_loss(Q_target, Q_pred)
-                        loss = F.huber_loss(Q_target, Q_pred)
-                        
+                        memory.batch_update(idxs, errors)
+
                     Pikachu.loss = float(loss)
 
                     optimizer.zero_grad()

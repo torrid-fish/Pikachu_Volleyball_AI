@@ -144,17 +144,17 @@ class Memory(object):
     def __init__(self, capacity):
         self.capacity = capacity
         self.memory = deque(maxlen=capacity)
+        self.size = 0
 
     def add(self, state, action, reward, next_state, done):
         self.memory.append([state, action, reward, next_state, done])
+        self.size = min(self.capacity, self.size + 1)
+
 
     def sample(self, batch_size):
         batch = random.sample(self.memory, batch_size)
         observations, actions, rewards, next_observations, dones = zip(*batch)
         return observations, actions, rewards, next_observations, dones
-
-    def size(self):
-        return len(self.memory)
 
 
 def d3qn_act(isPlayer2: bool, state, model: Dueling_D3QN) -> int:
@@ -226,7 +226,7 @@ class SumTree(object):
         self.update (tree_index, priority)
 
         # Add 1 to data_pointer
-        self.data_pointer += 1
+        self.data_pointer = self.data_pointer + 1
 
         if self.data_pointer >= self.capacity:  # If we're above the capacity, we go back to first index (we overwrite)
             self.data_pointer = 0
@@ -285,7 +285,7 @@ class PER(object):  # stored as ( state, action, reward, next_state ) in SumTree
         # Making the tree 
         self.tree = SumTree(capacity)
         self.size = 0
-        self.capacity = 0
+        self.capacity = capacity
         
     # Next, we define a function to store a new experience in our tree.
     # Each new experience will have a score of max_prority (it will be then improved when we use this exp to train our DDQN).
