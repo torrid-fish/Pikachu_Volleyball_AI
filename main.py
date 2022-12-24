@@ -12,8 +12,6 @@ STATE_MODE = "info_vector"
 P1_mode = "Human"
 P2_mode = "D3QN"
 
-# What's wrong with my model load QQ
-
 if __name__ == '__main__':
     # Create players and game
     P1 = Player(P1_mode, False)
@@ -66,7 +64,7 @@ if __name__ == '__main__':
         # Reward gamma
         GAMMA = 0.99
         # Size of slice
-        BATH = 128
+        BATH = 64
         
         # Memory relative
         REPLAY_MEMORY = 4096
@@ -78,10 +76,10 @@ if __name__ == '__main__':
         learn_step = 0
 
         # Epsilon relatife
-        BEGIN_EPSILON = 0.2
+        BEGIN_EPSILON = 0.3
         epsilon = BEGIN_EPSILON
         FINAL_EPSILON = 0.0001 # Smallest epsilon
-        EXPLORE = 25000 # Controlling the epsilon
+        EXPLORE = 250000 # Controlling the epsilon
 
         for epoch in count():
             # Reset environment
@@ -104,7 +102,7 @@ if __name__ == '__main__':
                     epsilon -= (BEGIN_EPSILON - FINAL_EPSILON) / EXPLORE
 
                 # Interact with environment
-                reward, next_state, done = Pikachu.update(P1.get_act(Pikachu.env), action)
+                reward, next_state, done = Pikachu.update(P1.get_act(Pikachu.env), action, epsilon)
 
                 # Update reward
                 episode_reward += reward

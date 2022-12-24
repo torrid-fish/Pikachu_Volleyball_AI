@@ -65,13 +65,13 @@ class Dueling_D3QN(nn.Module):
         
         elif STATE_MODE == "info_vector":
 
-            self.f1 = nn.Linear(17, 128)
+            self.f1 = nn.Linear(17, 512)
 
-            self.val_hidden = nn.Linear(128, 64)
-            self.adv_hidden = nn.Linear(128, 64)
+            self.val_hidden = nn.Linear(512, 256)
+            self.adv_hidden = nn.Linear(512, 256)
 
-            self.val = nn.Linear(64, 1) # State value
-            self.adv = nn.Linear(64, action_dim) # Advantage value
+            self.val = nn.Linear(256, 1) # State value
+            self.adv = nn.Linear(256, action_dim) # Advantage value
 
             torch.nn.init.normal_(self.val_hidden.weight, 0, 0.02)
             torch.nn.init.normal_(self.val.weight, 0, 0.02)

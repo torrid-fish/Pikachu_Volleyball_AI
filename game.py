@@ -56,6 +56,7 @@ class Game:
         self.is_player1_win, self.is_player2_win = 0, 0
         self.beg_time = time.perf_counter()
         self.score, self.lose_pt = [], []
+        self.pre_score = []
         self.P2win, self.tot = 0, 0
         self.last_time = time.perf_counter()
         self.loss = 0
@@ -64,6 +65,9 @@ class Game:
         self.rewards = [0]
         self.pre_cal_range = 100
         self.pre_result = []
+        self.avgwinrt = 0
+        self.prewinrt = 0
+        self.epsilon = 0
 
 
         # Create and reset the environment
@@ -162,31 +166,17 @@ class Game:
         self.screen.blit(surface, (2 * (30 + self.resolution_ratio * 432), 30))
         font = pygame.font.Font(None, int(20 * self.resolution_ratio))
 
-        # Cal win rate
-        avgwin = self.P2win
-        if self.tot:
-            avgwinrt = avgwin / self.tot
-        else:
-            avgwinrt = 0
-
-        if self.tot < self.pre_cal_range:
-            prewin = avgwin
-            prewinrt = avgwinrt
-        else:
-            prewin = np.sum(self.pre_result[-self.pre_cal_range:])
-            prewinrt = prewin / self.pre_cal_range
-
         message = [
         f'Speed(round/s): {self.tot / (time.perf_counter() - self.beg_time):.2f}', 
         f'Speed(frm/s): {1 / (time.perf_counter() - self.last_time):.2f}',
         f'== P2 info ==',
-        f'avg win: {avgwin}',
-        f'avg win rate: {avgwinrt:.2f}',
-        f'pre win: {prewin}', 
-        f'pre win rate: {prewinrt:.2f}',
+        f'avg win rate: {self.avgwinrt:.2f}', 
+        f'pre win rate: {self.prewinrt:.2f}',
         f'== Train info ==',
+        f'round: {self.tot}',
         f'loss: {self.loss:.6f}',
-        f'reward: {self.rewards[-1]:.6f}'
+        f'reward: {self.rewards[-1]:.6f}',
+        f'epsilon: {self.epsilon:.6f}'
         ]
         
         self.last_time = time.perf_counter()
@@ -196,6 +186,30 @@ class Game:
             if cnt == 0: h = text.get_height()
             self.screen.blit(text, (2 * (30 + self.resolution_ratio * 432), 30 + cnt * h))
             cnt += 2    
+
+    def __update_winrt(self):
+        # Calculate average win rate
+        if self.tot:
+            self.avgwinrt = (self.P2win + self.is_player2_win) / (self.tot + 1)
+        else:
+            self.avgwinrt = 0
+                
+        # Calculate previous win rate
+        if self.tot < self.pre_cal_range:
+            self.prewinrt = self.avgwinrt
+        else:
+            self.prewinrt = np.sum(self.pre_result[-self.pre_cal_range:]) / self.pre_cal_range
+
+        # Update win rate list (for plotting)
+        self.score += [self.avgwinrt]
+        if self.tot < self.pre_cal_range:
+            self.pre_score += [self.avgwinrt]
+        else:
+            self.pre_score += [self.prewinrt]
+
+        # Update other elements
+        self.P2win += self.is_player2_win
+        self.pre_result += [self.is_player2_win]
 
     def __update_train(self, P1_act, P2_act):
         # Move to next state
@@ -228,18 +242,16 @@ class Game:
             self.is_player1_win |= self.reward == -1
             self.is_player2_win |= self.reward == 1
             if self.done:
-                self.score += [(self.P2win + self.is_player2_win) / (self.tot + 1)]
-                self.lose_pt += [self.env.engine.ball.x]
-                self.P2win += self.is_player2_win
+                self.__update_winrt()
                 self.tot += 1
-                self.fps = 10
-                # Calculate winrate
-                self.pre_result += [self.is_player2_win]
+                self.lose_pt += [self.env.engine.ball.x]
                 # Draw plot
                 fig = Figure()
                 # Plot P2 win rate
                 ax1 = fig.add_subplot(3, 1, 1)
                 ax1.plot(self.score)
+                ax1.plot(self.pre_score)
+                ax1.legend(['avg', f'pre{self.pre_cal_range}'])
                 ax1.set_ylim(0, 1.1)
                 ax1.set_title('P2 Win rate')
                 # Plot final reward value
@@ -454,17 +466,18 @@ class Game:
         This function will return the initial state.
         """
         # Reset and cal state
-        self.scene = self.env.reset(options={'is_player2_serve': self.tot % 2})
+        self.scene = self.env.reset(options={'is_player2_serve': self.is_player2_win}) # self.tot % 2
         state = self.__cal_state()
         # Reset who win
         if reset:
             self.is_player1_win, self.is_player2_win = 0, 0
         return state
 
-    def update(self, P1_act, P2_act) -> tuple[int, list]:
+    def update(self, P1_act, P2_act, epsilon) -> tuple[int, list]:
         """
         This function will return `reward, next_state, done`.
         """
+        self.epsilon = epsilon
         # Update landing point
         self.__updateexpected_landing_point_x(self.env.engine.ball)
 
