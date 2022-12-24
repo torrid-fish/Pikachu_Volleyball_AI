@@ -149,6 +149,14 @@ class Game:
             ptrect = text.get_rect(center=(self.sx + pt * self.resolution_ratio, 280 * self.resolution_ratio + self.sy))
             self.screen.blit(text, ptrect)
 
+    def __draw_fall_pt(self):
+        font = pygame.font.Font(None, int(30*self.resolution_ratio))
+        fallx = self.env.engine.ball.expected_landing_point_x
+
+        text = font.render(f'V', True, (0, 0, 0))
+        ptrect = text.get_rect(center=(self.sx + fallx * self.resolution_ratio, 280 * self.resolution_ratio + self.sy))
+        self.screen.blit(text, ptrect)
+
     def __draw_player(self):
         # Set the font and font size for the text
         font = pygame.font.Font(None, int(30 * self.resolution_ratio))
@@ -301,6 +309,8 @@ class Game:
         self.__draw_info()
 
         self.__draw_lose_pt()
+
+        self.__draw_fall_pt()
 
         self.__draw_control(True, P1_act, True, P2_act)
         ### End: Draw infomations ###

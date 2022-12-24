@@ -9,7 +9,7 @@ MODE = "Train"
 # STATE_MODE = "gray_scale" 
 STATE_MODE = "info_vector"
 
-PER_ENABLE = False
+PER_ENABLE = True
 
 P1_mode = "Attacker"
 P2_mode = "D3QN"
@@ -67,7 +67,7 @@ if __name__ == '__main__':
         # Reward gamma
         GAMMA = 0.99
         # Size of slice
-        BATH = 64
+        BATH = 128
         
         # Memory relative
         REPLAY_MEMORY = 4096
@@ -117,29 +117,15 @@ if __name__ == '__main__':
 
                 # Update reward
                 episode_reward += reward
-                # Add experience to memory
 
-                ### add trans
+                # Add transition
                 if PER_ENABLE:
-                    target = network(torch.FloatTensor(state).to(device))
-                    old_val = target[0][action]
-                    target_val = target_network(torch.FloatTensor(next_state).to(device))
-                    target_next = network(torch.FloatTensor(next_state).to(device))
-                    if done:
-                        target[0][action] = reward
-                    else:
-                        a = np.argmax(target_next.data.cpu().numpy())
-                        target[0][action] = reward + GAMMA * target_val[0][a]
-                    
-                    td_error = abs(old_val - target[0][action])
-
-                    memory.add(td_error, (state, action, reward, next_state, done))
+                    memory.store((state, action, reward, next_state, done))
                 else:
                     memory.add(state, action, reward, next_state, done)
 
                 # Begin to learn
-                if memory.size() >= BEGIN_LEARN_SIZE:
-                    #print("Learn session started")
+                if memory.size >= BEGIN_LEARN_SIZE:
                     learn_step += 1
 
                     # Update target network
@@ -155,7 +141,6 @@ if __name__ == '__main__':
                         actions = torch.LongTensor(list(mini_batch[1])).to(device)
                         rewards = torch.FloatTensor(list(mini_batch[2])).to(device)
                         next_states = torch.FloatTensor(np.vstack(mini_batch[3])).to(device)
-                        ###dones = torch.FloatTensor(np.array(dones)).to(device)
                         dones = torch.LongTensor(mini_batch[4].astype(int)).to(device)
                     else:
                         # Sample data from memory
@@ -200,9 +185,9 @@ if __name__ == '__main__':
                         loss = (torch.FloatTensor(is_weights).to(device) * F.huber_loss(Q_target, Q_pred)).mean()
                         errors = torch.abs(Q_target - Q_pred).data.to(device)
 
+                        # Update priority in ReplayBuffer
                         for i in range(BATH):
-                            idx = idxs[i]
-                            memory.update(idx, errors[i])
+                            memory.batch_update(idxs[i], errors[i])
                     else:
                         # loss = F.mse_loss(Q_target, Q_pred)
                         loss = F.huber_loss(Q_target, Q_pred)
@@ -223,7 +208,7 @@ if __name__ == '__main__':
             
             epoch_reward += episode_reward
 
-            if epoch % UPDATA_TAGESTEP == 0 and epoch != 0:
+            if epoch % UPDATA_TAGESTEP == 0 and epoch != 0 and memory.size >= BEGIN_LEARN_SIZE:
                 print(f"{epoch} epoch reward : {epoch_reward / UPDATA_TAGESTEP}")
                 print(f"{epoch} epoch loss : {loss}")
                 print("Model saved!")
