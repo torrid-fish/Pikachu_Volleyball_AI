@@ -8,9 +8,11 @@ MODE = "Train"
 
 # STATE_MODE = "gray_scale" 
 STATE_MODE = "info_vector"
+PER_ENABLE = False
 
 P1_mode = "Human"
 P2_mode = "D3QN"
+
 
 if __name__ == '__main__':
     # Create players and game
@@ -69,7 +71,12 @@ if __name__ == '__main__':
         # Memory relative
         REPLAY_MEMORY = 4096
         BEGIN_LEARN_SIZE = 256 # This should be smaller than `REPLAY_MEMORY` to start learning
-        memory = PER(REPLAY_MEMORY)
+
+        # Choose which memory used
+        if PER_ENABLE:
+            memory = PER(REPLAY_MEMORY)
+        else:
+            memory = Memory(REPLAY_MEMORY)
 
         # Number of times to update target network
         UPDATA_TAGESTEP = 10
@@ -93,36 +100,41 @@ if __name__ == '__main__':
                 p = random.random()
                 if p < epsilon: # Choose random action
                     action = random.randint(0, n_action-1)
+                    Pikachu.is_random = True
                 else: # Use model to predict next action
                     state_tensor = torch.as_tensor(state, dtype=torch.float32).to(device)
                     action = network.select_action(state_tensor)
+                    Pikachu.is_random = False
 
                 # Update epsilon
-                if epsilon > FINAL_EPSILON: 
-                    epsilon -= (BEGIN_EPSILON - FINAL_EPSILON) / EXPLORE
+                epsilon -= (BEGIN_EPSILON - FINAL_EPSILON) / EXPLORE
+                epsilon = max(epsilon, FINAL_EPSILON)
+                Pikachu.epsilon = epsilon
 
                 # Interact with environment
-                reward, next_state, done = Pikachu.update(P1.get_act(Pikachu.env), action, epsilon)
+                reward, next_state, done = Pikachu.update(P1.get_act(Pikachu.env), action)
 
                 # Update reward
                 episode_reward += reward
                 # Add experience to memory
 
                 ### add trans
-                target = network(torch.FloatTensor(state).to(device))
-                old_val = target[0][action]
-                target_val = target_network(torch.FloatTensor(next_state).to(device))
-                target_next = network(torch.FloatTensor(next_state).to(device))
-                if done:
-                    target[0][action] = reward
-                else:
-                    a = np.argmax(target_next.data.cpu().numpy())
-                    target[0][action] = reward + GAMMA * target_val[0][a]
-                
-                td_error = abs(old_val - target[0][action])
+                if PER_ENABLE:
+                    target = network(torch.FloatTensor(state).to(device))
+                    old_val = target[0][action]
+                    target_val = target_network(torch.FloatTensor(next_state).to(device))
+                    target_next = network(torch.FloatTensor(next_state).to(device))
+                    if done:
+                        target[0][action] = reward
+                    else:
+                        a = np.argmax(target_next.data.cpu().numpy())
+                        target[0][action] = reward + GAMMA * target_val[0][a]
+                    
+                    td_error = abs(old_val - target[0][action])
 
-                memory.add(td_error, (state, action, reward, next_state, done))
-                # memory.add(state, action, reward, next_state, done)
+                    memory.add(td_error, (state, action, reward, next_state, done))
+                else:
+                    memory.add(state, action, reward, next_state, done)
 
                 # Begin to learn
                 if memory.size() >= BEGIN_LEARN_SIZE:
@@ -133,18 +145,26 @@ if __name__ == '__main__':
                     if learn_step % UPDATA_TAGESTEP == 0:
                         target_network.load_state_dict(network.state_dict())
 
-                    # Sample data from memory
-                    #states, actions, rewards, next_states, dones 
-                    mini_batch, idxs, is_weights = memory.sample(BATH)
-                    mini_batch = np.array(mini_batch, dtype=object).transpose()
-
-                    # Put parameters to GPU / CPU
-                    states = torch.FloatTensor(np.vstack(mini_batch[0])).to(device)
-                    actions = torch.LongTensor(list(mini_batch[1])).to(device)
-                    rewards = torch.FloatTensor(list(mini_batch[2])).to(device)
-                    next_states = torch.FloatTensor(np.vstack(mini_batch[3])).to(device)
-                    ###dones = torch.FloatTensor(np.array(dones)).to(device)
-                    dones = torch.LongTensor(mini_batch[4].astype(int)).to(device)
+                    if PER_ENABLE:
+                        # Sample data from memory
+                        mini_batch, idxs, is_weights = memory.sample(BATH)
+                        mini_batch = np.array(mini_batch, dtype=object).transpose()
+                        # Put parameters to GPU / CPU
+                        states = torch.FloatTensor(np.vstack(mini_batch[0])).to(device)
+                        actions = torch.LongTensor(list(mini_batch[1])).to(device)
+                        rewards = torch.FloatTensor(list(mini_batch[2])).to(device)
+                        next_states = torch.FloatTensor(np.vstack(mini_batch[3])).to(device)
+                        ###dones = torch.FloatTensor(np.array(dones)).to(device)
+                        dones = torch.LongTensor(mini_batch[4].astype(int)).to(device)
+                    else:
+                        # Sample data from memory
+                        states, actions, rewards, next_states, dones = memory.sample(BATH)
+                        # Put parameters to GPU / CPU
+                        states = torch.FloatTensor(np.array(states)).to(device)
+                        actions = torch.LongTensor(actions).to(device)
+                        rewards = torch.FloatTensor(rewards).to(device)
+                        next_states = torch.FloatTensor(np.array(next_states)).to(device)
+                        dones = torch.LongTensor(np.array(dones)).to(device)
 
                     # [0, 1, 2, ..., BATH-1]       
                     indices = np.arange(BATH)
@@ -174,15 +194,18 @@ if __name__ == '__main__':
                     Q_target = rewards + GAMMA * Q_temp
                     
                     # Compute loss
-                    # loss = F.mse_loss(Q_target, Q_pred)
-                    loss = (torch.FloatTensor(is_weights).to(device) * F.huber_loss(Q_target, Q_pred)).mean()
-                    #loss = F.huber_loss(Q_target, Q_pred)
-                    errors = torch.abs(Q_target - Q_pred).data.to(device)
+                    if PER_ENABLE:
+                        # loss = F.mse_loss(Q_target, Q_pred)
+                        loss = (torch.FloatTensor(is_weights).to(device) * F.huber_loss(Q_target, Q_pred)).mean()
+                        errors = torch.abs(Q_target - Q_pred).data.to(device)
 
-                    for i in range(BATH):
-                        idx = idxs[i]
-                        memory.update(idx, errors[i])
-
+                        for i in range(BATH):
+                            idx = idxs[i]
+                            memory.update(idx, errors[i])
+                    else:
+                        # loss = F.mse_loss(Q_target, Q_pred)
+                        loss = F.huber_loss(Q_target, Q_pred)
+                        
                     Pikachu.loss = float(loss)
 
                     optimizer.zero_grad()
