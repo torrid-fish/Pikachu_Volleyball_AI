@@ -26,17 +26,17 @@ class Player:
         if player == "D3QN":
             # Load in previous variables
             if STATE_MODE == "gray_scale":
-                PATH = './model/D3QN_SMGS.pt' 
+                PATH = './model/D3QN_SMGS.pth' 
             elif STATE_MODE == "info_vector":
-                PATH = './model/D3QN_SMIV.pt' 
-
-            self.model = Dueling_D3QN(18)
+                PATH = './model/D3QN_SMIV.pth' 
+                
             try:
-                self.model.load_state_dict(torch.load(PATH))
+                self.model = torch.load(PATH)
                 print("Model loaded sucessfully.")
             except FileNotFoundError:
                 self.model = Dueling_D3QN(18)
                 print("Create a new model.")
+            
             # Set to evaluate mode
             self.model.eval()
 

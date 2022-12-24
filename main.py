@@ -12,6 +12,7 @@ STATE_MODE = "info_vector"
 P1_mode = "Human"
 P2_mode = "D3QN"
 
+# What's wrong with my model load QQ
 
 if __name__ == '__main__':
     # Create players and game
@@ -32,24 +33,24 @@ if __name__ == '__main__':
         
         # IO dimension
         n_action = 18 # Output shape (1, 18)
-
-        # Initialize two models
-        target_network = Dueling_D3QN(n_action)
-        network = Dueling_D3QN(n_action)
         
         # Load in previous variables
         if STATE_MODE == "gray_scale":
-            PATH = './model/D3QN_SMGS.pt' 
+            PATH = './model/D3QN_SMGS.pth' 
         elif STATE_MODE == "info_vector":
-            PATH = './model/D3QN_SMIV.pt' 
-            
+            PATH = './model/D3QN_SMIV.pth' 
+
+        # Load or create model
         try:
-            network.load_state_dict(torch.load(PATH))
-            target_network.load_state_dict(torch.load(PATH))
+            network = torch.load(PATH)
+            target_network = torch.load(PATH)
         except FileNotFoundError:
             network = Dueling_D3QN(n_action)
-            target_network.load_state_dict(network.state_dict())
+            target_network = Dueling_D3QN(n_action)
 
+        # Set to train mode
+        network.train()
+        target_network.train()
         summary(network)
 
         # Store to GPU / CPU
@@ -65,7 +66,7 @@ if __name__ == '__main__':
         # Reward gamma
         GAMMA = 0.99
         # Size of slice
-        BATH = 64
+        BATH = 128
         
         # Memory relative
         REPLAY_MEMORY = 4096
@@ -79,7 +80,7 @@ if __name__ == '__main__':
         # Epsilon relatife
         BEGIN_EPSILON = 0.2
         epsilon = BEGIN_EPSILON
-        FINAL_EPSILON = 0.001 # Smallest epsilon
+        FINAL_EPSILON = 0.0001 # Smallest epsilon
         EXPLORE = 25000 # Controlling the epsilon
 
         for epoch in count():
@@ -88,6 +89,7 @@ if __name__ == '__main__':
             episode_reward = 0
 
             # Keep learning until gain reward
+
             while True:
                 
                 p = random.random()
@@ -109,10 +111,6 @@ if __name__ == '__main__':
                 # Add experience to memory
 
                 ### add trans
-                #if STATE_MODE == "gray_code":
-
-
-                #elif STATE_MODE == "info_vector":
                 target = network(torch.FloatTensor(state).to(device))
                 old_val = target[0][action]
                 target_val = target_network(torch.FloatTensor(next_state).to(device))
@@ -140,7 +138,7 @@ if __name__ == '__main__':
                     # Sample data from memory
                     #states, actions, rewards, next_states, dones 
                     mini_batch, idxs, is_weights = memory.sample(BATH)
-                    mini_batch = np.array(mini_batch).transpose()
+                    mini_batch = np.array(mini_batch, dtype=object).transpose()
 
                     # Put parameters to GPU / CPU
                     states = torch.FloatTensor(np.vstack(mini_batch[0])).to(device)
@@ -208,4 +206,4 @@ if __name__ == '__main__':
                 print(f"{epoch} epoch loss : {loss}")
                 print("Model saved!")
                 epoch_reward = 0
-                torch.save(network.state_dict(), PATH)
+                torch.save(network, PATH)

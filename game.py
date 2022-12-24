@@ -62,7 +62,9 @@ class Game:
         self.losses = [0]
         self.reward = 0
         self.rewards = [0]
-        
+        self.pre_cal_range = 100
+        self.pre_result = []
+
 
         # Create and reset the environment
         self.env = PikachuVolleyballMultiEnv(render_mode=None)
@@ -159,30 +161,46 @@ class Game:
         surface.fill((0, 0, 0))
         self.screen.blit(surface, (2 * (30 + self.resolution_ratio * 432), 30))
         font = pygame.font.Font(None, int(20 * self.resolution_ratio))
-   
+
+        # Cal win rate
+        avgwin = self.P2win
+        if self.tot:
+            avgwinrt = avgwin / self.tot
+        else:
+            avgwinrt = 0
+
+        if self.tot < self.pre_cal_range:
+            prewin = avgwin
+            prewinrt = avgwinrt
+        else:
+            prewin = np.sum(self.pre_result[-self.pre_cal_range:])
+            prewinrt = prewin / self.pre_cal_range
 
         message = [
         f'Speed(round/s): {self.tot / (time.perf_counter() - self.beg_time):.2f}', 
         f'Speed(frm/s): {1 / (time.perf_counter() - self.last_time):.2f}',
-        f'P1 win: {self.tot - self.P2win}', 
-        f'P1 win rate: {1 - self.P2win / self.tot if self.tot else 0:.2f}',
-        f'P2 win: {self.P2win}',
-        f'P2 win rate: {self.P2win / self.tot if self.tot else 0:.2f}',
+        f'== P2 info ==',
+        f'avg win: {avgwin}',
+        f'avg win rate: {avgwinrt:.2f}',
+        f'pre win: {prewin}', 
+        f'pre win rate: {prewinrt:.2f}',
+        f'== Train info ==',
         f'loss: {self.loss:.6f}',
-        f'reward: {self.rewards[-1]:.6f}']
+        f'reward: {self.rewards[-1]:.6f}'
+        ]
         
         self.last_time = time.perf_counter()
         cnt = 0 
         for sentence in message:
             text = font.render(sentence, True, (255, 255, 255))
-            self.screen.blit(text, (2 * (30 + self.resolution_ratio * 432), 30 + cnt * text.get_height()))
-            cnt += 2     
+            if cnt == 0: h = text.get_height()
+            self.screen.blit(text, (2 * (30 + self.resolution_ratio * 432), 30 + cnt * h))
+            cnt += 2    
 
     def __update_train(self, P1_act, P2_act):
         # Move to next state
         action = [P1_act, P2_act]
         self.scene, self.reward, self.done, _, _ = self.env.step(action)   
-
 
         ### Begin: Draw infomations ###
         self.__draw_background()
@@ -215,6 +233,8 @@ class Game:
                 self.P2win += self.is_player2_win
                 self.tot += 1
                 self.fps = 10
+                # Calculate winrate
+                self.pre_result += [self.is_player2_win]
                 # Draw plot
                 fig = Figure()
                 # Plot P2 win rate
@@ -434,7 +454,7 @@ class Game:
         This function will return the initial state.
         """
         # Reset and cal state
-        self.scene = self.env.reset(options={'is_player2_serve': self.is_player2_win})
+        self.scene = self.env.reset(options={'is_player2_serve': self.tot % 2})
         state = self.__cal_state()
         # Reset who win
         if reset:
