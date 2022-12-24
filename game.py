@@ -238,7 +238,7 @@ class Game:
             isright, isleft, isup, isdown, ispower = P1[P1_act]
             power = font.render('P', True, color[ispower])
             up = font.render('^', True, color[isup])
-            down = font.render('V', True, color[isdown])
+            down = font.render('v', True, color[isdown])
             right = font.render('>', True, color[isright])
             left = font.render('<', True, color[isleft])
             mid = up.get_rect(center=(432 * self.resolution_ratio / 4 + self.sx, 292 * self.resolution_ratio / 8 + self.sy))
@@ -462,7 +462,10 @@ class Game:
                         reward += int(userInput.y_direction == -1)
         return reward / 100
 
-    def __updateexpected_landing_point_x(self, ball: Ball):
+    def __update_expected_landing_point_x(self, ball: Ball):
+        """
+        Calculate the actual landing point of current ball x
+        """
         copyBall = Ball(False)
         copyBall.x, copyBall.y, copyBall.x_velocity, copyBall.y_velocity = ball.x, ball.y, ball.x_velocity, ball.y_velocity
 
@@ -472,9 +475,10 @@ class Game:
             loopCounter += 1
 
             futureCopyBallX = copyBall.x_velocity + copyBall.x
+            # Reflection happens when ball collide with left, right wall
             if futureCopyBallX < BALL_RADIUS or futureCopyBallX > GROUND_WIDTH:
                 copyBall.x_velocity = -copyBall.x_velocity
-            
+            # Reflection happens when ball collide with ceiling
             if copyBall.y + copyBall.y_velocity < 0:
                 copyBall.y_velocity = 1
 
@@ -557,7 +561,7 @@ class Game:
         This function will return `reward, next_state, done`.
         """
         # Update landing point
-        self.__updateexpected_landing_point_x(self.env.engine.ball)
+        self.__update_expected_landing_point_x(self.env.engine.ball)
 
         if self.mode == "Train":
             self.__update_train(P1_act, P2_act)

@@ -73,9 +73,6 @@ def old_ai_act(env: PikachuVolleyballMultiEnv, isPlayer2):
     else:
         AI_player, other_player = env.engine.players
             
-    # Update Boldness
-    AI_player.computer_boldness = random.randrange(32768) % 5
-
     # First assume it's target is the x pt of ball
     virtualexpected_landing_point_x = ball.expected_landing_point_x
     

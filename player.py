@@ -1,8 +1,10 @@
 import numpy as np
 import sys
+import torch
 from Actions.Old_AI_Action import old_ai_act
 from Actions.Human_Action import human_act
-from Actions.D3QN_Action import *
+from Actions.Attacker_Action import attacker_act
+from Actions.D3QN_Action import d3qn_act, Dueling_D3QN
 from gym_pikachu_volleyball.envs import PikachuVolleyballMultiEnv
 from main import STATE_MODE
 
@@ -16,9 +18,9 @@ class Player:
     `get_act`: Retrieve the next movement. 
     """
     def __init__(self, player: str = "Random", isPlayer2: bool = None):
-        self.mode_list = ["Random", "Human", "apex_D3QN", "D3QN", "Old_AI"]
+        self.mode_list = ["Random", "Human", "apex_D3QN", "D3QN", "Old_AI", "Attacker"]
         if player not in self.mode_list:
-            print(f'Error: :player is an unknown AI_player.')
+            print(f'Error: {player} is an unknown player.')
             sys.exit()
         self.mode = player
         self.isPlayer2 = isPlayer2
@@ -63,5 +65,7 @@ class Player:
 
         elif self.mode == "Old_AI":
             action = old_ai_act(env, self.isPlayer2)
-
+        
+        elif self.mode == "Attacker":
+            action = attacker_act(env)
         return action

@@ -8,9 +8,10 @@ MODE = "Train"
 
 # STATE_MODE = "gray_scale" 
 STATE_MODE = "info_vector"
+
 PER_ENABLE = False
 
-P1_mode = "Human"
+P1_mode = "Attacker"
 P2_mode = "D3QN"
 
 
@@ -83,7 +84,7 @@ if __name__ == '__main__':
         learn_step = 0
 
         # Epsilon relatife
-        BEGIN_EPSILON = 0.3
+        BEGIN_EPSILON = 0.2
         epsilon = BEGIN_EPSILON
         FINAL_EPSILON = 0.0001 # Smallest epsilon
         EXPLORE = 250000 # Controlling the epsilon
