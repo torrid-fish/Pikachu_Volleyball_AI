@@ -9,6 +9,7 @@ import threading
 from player import Player
 from game import Game
 import random
+import os
 
 ## HYPER PARAMETERS ##
 
@@ -19,7 +20,7 @@ INPUT_DIM = 17
 OUTPUT_DIM = 18 
 
 # number of actor
-ACT_NUM = 3
+ACT_NUM = 4
 
 # PATH of actors
 PATH = [f'./model/D3QN_SMIV_A{i}.pth' for i in range(ACT_NUM)]
@@ -424,20 +425,26 @@ def train():
 
         # If experience is not enough, don't learn
         if exp_cnt < MINI_BATCH_LEN:
+            os.system('cls')
+            print('Collecting Data ', end='')
+            for i in range(exp_cnt % 3 + 1): print('.', end='')
+            print('')
             continue
 
         for i in range(ACT_NUM):
             loss += [learner(memory, q_network[i], target_network, optimizer[i])]
         
         if cnt % 10 == 0:
-            target_network = q_network[loss.index(max(loss))]
+            target_network = q_network[loss.index(min(loss))]
 
         cnt += 1
 
-        print(f'=============================')
+        os.system('cls')
+        print(f'epoch = {cnt}')
+        print('=============================================================')
         for i in range(ACT_NUM):
-            print(f'Network{i} loss: {loss[i]}')
-            print(f'Network{i} win rate: {Pikachu[i].prewinrt}')
-        print(f'=============================')
+            print(f'Network{i} loss: {loss[i]:.4f} / pre win rate: {Pikachu[i].prewinrt:.4f} / avg win rate {Pikachu[i].avgwinrt:.4f}')
+            if i != ACT_NUM - 1: print('=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=')      
+        print('=============================================================')  
     
     ############################################

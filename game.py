@@ -73,7 +73,7 @@ class Game:
         self.scene = self.env.reset(return_info=True, options={'is_player2_serve': True})
 
         # Initialize pygame
-        pygame.init()
+        # pygame.init()
         if mode == "Play":
             self.resolution_ratio = 2 # The screen is twice larger
             self.sx, self.sy = 0, 0
@@ -81,9 +81,9 @@ class Game:
         else:
             self.resolution_ratio = 1.3
             self.sx, self.sy = 30, 30
-            self.screen = pygame.display.set_mode((1060 * self.resolution_ratio, 304 * self.resolution_ratio + 2 * 30))
+            # self.screen = pygame.display.set_mode((1060 * self.resolution_ratio, 304 * self.resolution_ratio + 2 * 30))
 
-        pygame.display.set_caption("Pikachu Volleyball")
+        # pygame.display.set_caption("Pikachu Volleyball")
  
     ## Private member ##
 
@@ -299,27 +299,27 @@ class Game:
         self.scene, self.reward, self.done, _, _ = self.env.step(action)   
 
         ### Begin: Draw infomations ###
-        self.__draw_background()
+        # self.__draw_background()
 
-        self.__draw_player()
+        # self.__draw_player()
 
-        self.__draw_info()
+        # self.__draw_info()
 
-        self.__draw_lose_pt()
+        # self.__draw_lose_pt()
 
-        self.__draw_fall_pt()
+        # self.__draw_fall_pt()
 
-        self.__draw_control(True, P1_act, True, P2_act)
+        # self.__draw_control(True, P1_act, True, P2_act)
         ### End: Draw infomations ###
 
         # Update the window
-        pygame.display.flip()
+        # pygame.display.flip()
 
         # If the window was closed, end the game
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
+        # for event in pygame.event.get():
+        #     if event.type == pygame.QUIT:
+        #         pygame.quit()
+        #        sys.exit()
         
         # Go to next status
         self.counter += 1
@@ -351,7 +351,7 @@ class Game:
                 ax3.set_xlabel('Round')
                 # Set padding
                 fig.tight_layout(pad=0.5)
-                self.__draw_figure(fig)
+                # self.__draw_figure(fig)
 
     def __update_play(self, P1_act, P2_act):
         # Move to next state
