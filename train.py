@@ -18,15 +18,15 @@ INPUT_DIM = 17
 # Estimated Q_value for each action
 OUTPUT_DIM = 18 
 
-# Path to model
-PATH = './model/D3QN_SMIV_A0.pth'
+# number of actor
+ACT_NUM = 3
+
+# PATH of actors
+PATH = [f'./model/D3QN_SMIV_A{i}.pth' for i in range(ACT_NUM)]
 
 # Opponent
 Opponent = "Attacker"
 P1 = Player(Opponent, False)
-
-# Create a single game
-Pikachu = Game("Train", "Attacker", "D3QN")
 
 # The decease rate of reward
 GAMMA = 0.99
@@ -49,6 +49,9 @@ EXPLORE = 250000
 
 # When counter reach this value, update target_network
 TARGET_UPDATE_PERIOD = 100
+
+# Learn rate of optimizer
+LEARN_RATE = 0.01
 
 # Counter of exprience
 exp_cnt = 0
@@ -269,10 +272,6 @@ def learner(replay_buffer: PER, q_network, target_network, optimizer: torch.opti
     """
     This function will learn one sample (size = `MINI_BATCH_SIZE`) and update the q_network.
     """
-    # If experience is not enough, then return.
-    if exp_cnt < MINI_BATCH_LEN:
-        return 0
-
     # Sample a batch of transitions from the replay buffer
     mini_batch, idxs, is_weight = replay_buffer.sample(MINI_BATCH_LEN)
 
@@ -354,54 +353,91 @@ def actor(replay_buffer: PER, game: Game, q_network, target_network):
         # Gain one more exp
         exp_cnt += 1
 
-def call_actor(replay_buffer: PER, game: Game, q_network, target_network):
+def call_actor(replay_buffer: PER, game: Game, q_network, target_network, path, update_model_period):
+    cnt = 0
     while True:
+        cnt += 1
         actor(replay_buffer, game, q_network, target_network)
+        if cnt % update_model_period == 0:
+            torch.save(q_network, path)
+        
 #################################
 
 def train():
     ## Initialize model ##
+    # List of q_network
+    q_network = []
     # Try to load existed model, otherwise generate a new one
-    try:
-        q_network = torch.load(PATH)
-        target_network = torch.load(PATH)
-        print("Use old models.")
-    except FileNotFoundError:
-        q_network = Dueling_D3QN(OUTPUT_DIM)
-        target_network = Dueling_D3QN(OUTPUT_DIM)
-        print("Create new models.")
+    for i in range(ACT_NUM):
+        try:
+            q_network += [torch.load(PATH[i])]
+            print(f'Q_network {i}: Loaded!')
+        except FileNotFoundError:
+            q_network += [Dueling_D3QN(OUTPUT_DIM)]
+            print(f'Q_network {i}: Created!')
 
-    # Set q network to train mode
-    q_network.train()
+        # Set q network to train mode
+        q_network[i].train()
+
+    # Random a q_network as target_network
+    target_network = q_network[random.randrange(ACT_NUM)]
+
+    # Set target network to train mode
     target_network.train()
 
     # Output the summary of the network
-    summary(q_network)
+    for i in range(ACT_NUM):
+        summary(q_network[i])
+
+        # Store to GPU / CPU
+        q_network[i] = q_network[i].to(device)
 
     # Store to GPU / CPU
-    q_network = q_network.to(device)
     target_network = target_network.to(device)
     ######################
 
     ## Initialize optimizer ##
-    optimizer = torch.optim.Adam(q_network.parameters(), lr=0.001)
+    optimizer = [torch.optim.Adam(q_network[i].parameters(), lr=LEARN_RATE) for i in range(ACT_NUM)]
     ##########################
     
     ## Initialize Memory ##
+    # Shared memory
     memory = PER(REPLAY_MEMORY)
     #######################
 
+    ## Initialize Memory ##
+    Pikachu = [Game("Train", "Attacker", "D3QN") for i in range(ACT_NUM)]
+    #######################
+
     ## Parallel Computing learner and actor ##
-    ACTOR = threading.Thread(target = call_actor, args = (memory, Pikachu, q_network, target_network))
-
     print("Start training")
-
-    # Start training
-    ACTOR.start()
     
-    # while True:
+    for i in range(ACT_NUM):
+        # Create multi thread
+        ACTOR = threading.Thread(target = call_actor, args = (memory, Pikachu[i], q_network[i], target_network, PATH[i], 10))
+        # Start training
+        ACTOR.start()
+    
+    cnt = 0
+    while True:
+        loss = []
+
+        # If experience is not enough, don't learn
+        if exp_cnt < MINI_BATCH_LEN:
+            continue
+
+        for i in range(ACT_NUM):
+            loss += [learner(memory, q_network[i], target_network, optimizer[i])]
         
-    #   actor(memory, Pikachu, q_network, target_network)
-    #   Pikachu.loss = learner(memory, q_network, target_network, optimizer)
+        if cnt % 10 == 0:
+            target_network = q_network[loss.index(max(loss))]
+
+        cnt += 1
+
+        print(f'=============================')
+        for i in range(ACT_NUM):
+            print(f'Network{i} loss: {loss[i]}')
+            print(f'Network{i} win rate: {Pikachu[i].prewinrt}')
+        print(f'=============================')
     
     ############################################
