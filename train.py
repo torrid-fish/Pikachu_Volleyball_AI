@@ -1,0 +1,407 @@
+import numpy as np
+import torch
+import torch.nn.functional as F
+from game import *  
+from itertools import count
+from torchsummary import summary
+from Actions.D3QN_Action import Dueling_D3QN
+import threading
+from player import Player
+from game import Game
+import random
+
+## HYPER PARAMETERS ##
+
+# Infomation vector
+INPUT_DIM = 17
+
+# Estimated Q_value for each action
+OUTPUT_DIM = 18 
+
+# Path to model
+PATH = './model/D3QN_SMIV_A0.pth'
+
+# Opponent
+Opponent = "Attacker"
+P1 = Player(Opponent, False)
+
+# Create a single game
+Pikachu = Game("Train", "Attacker", "D3QN")
+
+# The decease rate of reward
+GAMMA = 0.99
+
+# The size of batch we used in learner
+MINI_BATCH_LEN = 64
+
+# The size of our memory
+REPLAY_MEMORY = 4096
+
+# The begin value of epsilon
+BEGIN_EPSILON = 0.2
+epsilon = BEGIN_EPSILON
+
+# The final value of epsilon
+FINAL_EPSILON = 0.0001 
+
+# The decrease rate of epsilon
+EXPLORE = 250000 
+
+# When counter reach this value, update target_network
+TARGET_UPDATE_PERIOD = 100
+
+# Counter of exprience
+exp_cnt = 0
+
+# The device we used (either CPU or GPU)
+if torch.cuda.is_available():
+    device = "cuda:0"
+    print("GPU is used.")
+else:
+    device = "cpu"
+    print("CPU is used.")
+######################
+
+## Implement Memory ##
+
+class PER:  # stored as ( s, a, r, s_ ) in SumTree
+    e = 0.01
+    a = 0.6
+    beta = 0.4
+    beta_increment_per_sampling = 0.001
+
+    def __init__(self, capacity):
+        self.tree = SumTree(capacity)
+        self.capacity = capacity
+
+    def _get_priority(self, error):
+        return (np.abs(error) + self.e) ** self.a
+
+    def add(self, error, sample):
+        p = self._get_priority(error.data.item())
+        self.tree.add(p, sample)
+
+    def sample(self, n):
+        batch = []
+        idxs = []
+        segment = self.tree.total() / n
+        priorities = []
+
+        self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])
+
+        for i in range(n):
+            a = segment * i
+            b = segment * (i + 1)
+
+            s = random.uniform(a, b)
+            (idx, p, data) = self.tree.get(s)
+            priorities.append(p)
+            batch.append(data)
+            idxs.append(idx)
+
+        sampling_probabilities = priorities / self.tree.total()
+        is_weight = np.power(self.tree.n_entries * sampling_probabilities, -self.beta)
+        is_weight /= is_weight.max()
+
+        return batch, idxs, is_weight
+
+    def update(self, idx, error):
+        for i, e in zip(idx, error):
+            p = self._get_priority(e)
+            self.tree.update(i, p)
+        
+    def size(self):
+        return self.tree.n_entries
+
+class SumTree:
+    write = 0
+
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.tree = np.zeros(2 * capacity - 1)
+        self.data = np.zeros(capacity, dtype=object)
+        self.n_entries = 0
+
+    # update to the root node
+    def _propagate(self, idx, change):
+        parent = (idx - 1) // 2
+
+        self.tree[parent] += change
+
+        if parent != 0:
+            self._propagate(parent, change)
+
+    # find sample on leaf node
+    def _retrieve(self, idx, s):
+        left = 2 * idx + 1
+        right = left + 1
+
+        if left >= len(self.tree):
+            return idx
+
+        if s <= self.tree[left]:
+            return self._retrieve(left, s)
+        else:
+            return self._retrieve(right, s - self.tree[left])
+
+    def total(self):
+        return self.tree[0]
+
+    # store priority and sample
+    def add(self, p, data):
+        idx = self.write + self.capacity - 1
+
+        self.data[self.write] = data
+        self.update(idx, p)
+
+        self.write += 1
+        if self.write >= self.capacity:
+            self.write = 0
+
+        if self.n_entries < self.capacity:
+            self.n_entries += 1
+
+    # update priority
+    def update(self, idx, p):
+        change = p - self.tree[idx]
+
+        self.tree[idx] = p
+        self._propagate(idx, change)
+
+    # get priority and sample
+    def get(self, s):
+        idx = self._retrieve(0, s)
+        dataIdx = idx - self.capacity + 1
+
+        return (idx, self.tree[idx], self.data[dataIdx])
+
+######################
+
+## Implement functions ##
+
+def compute_td_targets(rewards: torch.tensor, dones: torch.tensor, q_network, target_network, next_states):
+    """
+    ## Formula
+    - action\n
+    `action = argmax_{a}{q_network(next_state, a)}`\n
+    action is the best operation that the network can do.
+    
+    - td_target\n
+    `td_target = reward + GAMMA * target_network(next_state, action)`\n
+    Then the estimated Q is computed as above.
+
+    ## Return
+    A list of td_targets.\n
+    - type = `list`, shape = `[MINI_BATCH_LEN]`
+    """
+    # Compute the TD targets for each transition
+    td_targets = []
+    for i in range(MINI_BATCH_LEN):
+        reward = rewards[i]
+        done = dones[i]
+        next_state = next_states[i]
+
+        if done:
+            # If the episode is done, the TD target is the reward
+            td_target = reward
+        else:
+            # Otherwise, the TD target is the reward plus the discounted maximum action-value for the next state
+            action = q_network(next_state).argmax()
+            td_target = reward + GAMMA * target_network(next_state)[0, action]
+
+        td_targets.append(td_target)
+
+    return td_targets
+
+def compute_td_error(state: torch.tensor, action, reward, next_state: torch.tensor, done, q_network, target_network):
+    """
+    Compute td_error for single exp.
+    ## Return
+    td_error.\n
+    - type = float
+    """
+    # Compute td_targets
+    if done:
+        # If the episode is done, the TD target is the reward
+        td_target = reward
+    else:
+        # Otherwise, the TD target is the reward plus the discounted maximum action-value for the next state
+        action = q_network(next_state).argmax()
+        td_target = reward + GAMMA * target_network(next_state)[0, action]
+
+    # Compute q_value
+    q_value = q_network(state)[0, action]
+    # Return td_error
+    return torch.abs(q_value - td_target)
+
+def compute_loss_and_grad(states: torch.tensor, actions: torch.tensor, td_targets: torch.tensor, q_network, optimizer, is_weight):
+    """
+    This function will use td_targets and q_network(state) to calculate loss.\n
+    Here, we use `huber_loss` to calculate loss.\n
+    Also, it will utilize our optimizer to calculate gradiant of all vairables on q_network.
+    ### Return
+    #### loss
+    The loss of this learn.
+    - type = `float`
+    #### grads
+    The gardiant of element in the network.
+    - type = `list`, shape = `[q_network.paraemters()]`
+    """
+    # Compute the current action-value estimates
+    q_values = q_network(states)
+    q_selected = q_values.gather(1, actions.unsqueeze(1)).squeeze()
+
+    # Compute the loss (Important sample weight)
+    loss = (torch.tensor(is_weight, dtype= torch.float32).to(device) * F.mse_loss(td_targets, q_selected)).mean()
+
+    # Compute the gradients
+    optimizer.zero_grad()
+    loss.backward()
+    grads = [param.grad for param in q_network.parameters()]
+
+    return loss, grads
+
+#########################
+
+## Impelment learner and actor ##
+
+def learner(replay_buffer: PER, q_network, target_network, optimizer: torch.optim.Adam):
+    """
+    This function will learn one sample (size = `MINI_BATCH_SIZE`) and update the q_network.
+    """
+    # If experience is not enough, then return.
+    if exp_cnt < MINI_BATCH_LEN:
+        return 0
+
+    # Sample a batch of transitions from the replay buffer
+    mini_batch, idxs, is_weight = replay_buffer.sample(MINI_BATCH_LEN)
+
+    states, actions, rewards, next_states, dones = [], [], [], [], []
+    for batch in mini_batch:
+        states += [batch[0].reshape(17).clone().detach()]
+        actions += [batch[1]]
+        rewards += [batch[2]]
+        next_states += [batch[3].reshape(17).clone().detach()]
+        dones += [int(batch[4])]
+
+    states = torch.stack(states).to(device)
+    actions = torch.LongTensor(list(actions)).to(device)
+    rewards = torch.FloatTensor(list(rewards)).to(device)
+    next_states = torch.stack(next_states).to(device)
+    dones = torch.LongTensor(dones).to(device)
+    
+    # Compute the TD targets
+    td_targets = compute_td_targets(rewards, dones, q_network, target_network, next_states)
+    td_targets = torch.stack(td_targets).to(device)
+
+    # Compute the loss and gradients
+    loss, grads = compute_loss_and_grad(states, actions, td_targets, q_network, optimizer, is_weight)
+
+    # Update the variables in network
+    optimizer.step()
+
+    # Compute q_value
+    q_value = q_network(states)[0, actions]
+
+    # Compute td_errors
+    td_errors = torch.abs(td_targets - q_value)
+    td_errors = td_errors.data.cpu().numpy()
+    replay_buffer.update(idxs, td_errors)
+
+    return loss.cpu().detach().numpy()
+
+def actor(replay_buffer: PER, game: Game, q_network, target_network):
+    global exp_cnt, epsilon
+    state = game.reset(True)
+    # Convert state to tensor
+    state = state.reshape(1, INPUT_DIM)
+    state = torch.FloatTensor(state).to(device)
+    done = False
+    total_reward = 0
+    while not done:
+        # Select an action using an epsilon-greedy policy
+        if np.random.rand() < epsilon:
+            action = np.random.randint(OUTPUT_DIM)
+            game.is_random = True
+        else:
+            action = q_network(state).argmax()
+            game.is_random = False
+
+        # Update epsilon
+        epsilon -= (BEGIN_EPSILON - FINAL_EPSILON) / EXPLORE
+        epsilon = max(epsilon, FINAL_EPSILON)
+        game.epsilon = epsilon
+
+        # Take the action and observe the next state, reward, and done flag
+        reward, next_state, done = game.update(P1.get_act(game.env), action)
+        total_reward += reward
+
+        # Change state, next_state to tensor
+        state = state.reshape(1, INPUT_DIM)
+        state = state.clone().detach() # MUST ON DEVICE
+        next_state = next_state.reshape(1, INPUT_DIM)
+        next_state = torch.FloatTensor(next_state).to(device)
+
+        # Compute the TD error
+        td_error = compute_td_error(state, action, reward, next_state, done, q_network, target_network)
+
+        # Store the transition in the replay buffer with the TD error as a weight
+        replay_buffer.add(td_error, (state, action, reward, next_state, done))
+
+        # Update the state and continue the loop
+        state = next_state
+
+        # Gain one more exp
+        exp_cnt += 1
+
+def call_actor(replay_buffer: PER, game: Game, q_network, target_network):
+    while True:
+        actor(replay_buffer, game, q_network, target_network)
+#################################
+
+def train():
+    ## Initialize model ##
+    # Try to load existed model, otherwise generate a new one
+    try:
+        q_network = torch.load(PATH)
+        target_network = torch.load(PATH)
+        print("Use old models.")
+    except FileNotFoundError:
+        q_network = Dueling_D3QN(OUTPUT_DIM)
+        target_network = Dueling_D3QN(OUTPUT_DIM)
+        print("Create new models.")
+
+    # Set q network to train mode
+    q_network.train()
+    target_network.train()
+
+    # Output the summary of the network
+    summary(q_network)
+
+    # Store to GPU / CPU
+    q_network = q_network.to(device)
+    target_network = target_network.to(device)
+    ######################
+
+    ## Initialize optimizer ##
+    optimizer = torch.optim.Adam(q_network.parameters(), lr=0.001)
+    ##########################
+    
+    ## Initialize Memory ##
+    memory = PER(REPLAY_MEMORY)
+    #######################
+
+    ## Parallel Computing learner and actor ##
+    ACTOR = threading.Thread(target = call_actor, args = (memory, Pikachu, q_network, target_network))
+
+    print("Start training")
+
+    # Start training
+    ACTOR.start()
+    
+    # while True:
+        
+    #   actor(memory, Pikachu, q_network, target_network)
+    #   Pikachu.loss = learner(memory, q_network, target_network, optimizer)
+    
+    ############################################

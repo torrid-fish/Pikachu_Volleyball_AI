@@ -2,14 +2,11 @@ import time
 import sys
 import pygame
 import numpy as np
-from player import Player
-import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from gym_pikachu_volleyball import *
 from gym_pikachu_volleyball.envs.common import *
 from Actions.Old_AI_Action import *
-from main import STATE_MODE
 
 class Game:
     """
@@ -516,39 +513,33 @@ class Game:
         ball.expected_landing_point_x = copyBall.x
 
     def __cal_state(self):
-        if STATE_MODE == "gray_scale":
-            # Turn scene into gray scale
-            state = (self.scene[:, :, 0] + self.scene[:, :, 1] + self.scene[:, :, 2]) / 3
-            # Normalize data
-            state = state / 255
-        elif STATE_MODE == "info_vector":
-            # Generate info vector
-            P1 = self.env.engine.players[0]
-            P2 = self.env.engine.players[1]
-            ball = self.env.engine.ball
-            state = np.array([
-                P1.x, P1.y, P1.y_velocity, P1.state, P1.diving_direction, P1.lying_down_duration_left,
-                P2.x, P2.y, P2.y_velocity, P2.state, P2.diving_direction, P2.lying_down_duration_left,
-                ball.x, ball.y, ball.x_velocity, ball.y_velocity, ball.is_power_hit
-            ]).astype(float)
-            # Normalize data
-            state[0] = state[0] / GROUND_WIDTH # P1.x
-            state[1] = state[1] / GROUND_HEIGHT # P1.y
-            state[2] = (state[2] + 20) / 40 # P1.y_velocity
-            state[3] = state[3] / 10 # P1.state
-            state[4] = (state[4] + 1) / 2 # P1.diving_direction
-            state[5] = (state[5] + 2) / 4 # P1.lying_down_duration_left
-            state[6] = state[6] / GROUND_WIDTH # P2.x
-            state[7] = state[7] / GROUND_HEIGHT # P2.y
-            state[8] = (state[8] + 20) / 40 # P2.y_velocity
-            state[9] = state[9] / 10 # P2.state
-            state[10] = (state[10] + 1) / 2 # P2.diving_direction
-            state[11] = (state[11] + 2) / 4 # P2.lying_down_duration_left
-            state[12] = state[12] / GROUND_WIDTH # ball.x
-            state[13] = state[13] / GROUND_HEIGHT # ball.y
-            state[14] = (state[14] + 40) / 80 # ball.x_velocity
-            state[15] = (state[15] + 40) / 80 # ball.y_velocity
-            state[16] = int(state[16]) # ball.is_power_hit
+        # Generate info vector
+        P1 = self.env.engine.players[0]
+        P2 = self.env.engine.players[1]
+        ball = self.env.engine.ball
+        state = np.array([
+            P1.x, P1.y, P1.y_velocity, P1.state, P1.diving_direction, P1.lying_down_duration_left,
+            P2.x, P2.y, P2.y_velocity, P2.state, P2.diving_direction, P2.lying_down_duration_left,
+            ball.x, ball.y, ball.x_velocity, ball.y_velocity, ball.is_power_hit
+        ]).astype(float)
+        # Normalize data
+        state[0] = state[0] / GROUND_WIDTH # P1.x
+        state[1] = state[1] / GROUND_HEIGHT # P1.y
+        state[2] = (state[2] + 20) / 40 # P1.y_velocity
+        state[3] = state[3] / 10 # P1.state
+        state[4] = (state[4] + 1) / 2 # P1.diving_direction
+        state[5] = (state[5] + 2) / 4 # P1.lying_down_duration_left
+        state[6] = state[6] / GROUND_WIDTH # P2.x
+        state[7] = state[7] / GROUND_HEIGHT # P2.y
+        state[8] = (state[8] + 20) / 40 # P2.y_velocity
+        state[9] = state[9] / 10 # P2.state
+        state[10] = (state[10] + 1) / 2 # P2.diving_direction
+        state[11] = (state[11] + 2) / 4 # P2.lying_down_duration_left
+        state[12] = state[12] / GROUND_WIDTH # ball.x
+        state[13] = state[13] / GROUND_HEIGHT # ball.y
+        state[14] = (state[14] + 40) / 80 # ball.x_velocity
+        state[15] = (state[15] + 40) / 80 # ball.y_velocity
+        state[16] = int(state[16]) # ball.is_power_hit
 
         return state
 

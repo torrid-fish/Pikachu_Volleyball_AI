@@ -6,7 +6,6 @@ from Actions.Human_Action import human_act
 from Actions.Attacker_Action import attacker_act
 from Actions.D3QN_Action import d3qn_act, Dueling_D3QN
 from gym_pikachu_volleyball.envs import PikachuVolleyballMultiEnv
-from main import STATE_MODE
 
 class Player:
     """
@@ -27,10 +26,7 @@ class Player:
         
         if player == "D3QN":
             # Load in previous variables
-            if STATE_MODE == "gray_scale":
-                PATH = './model/D3QN_SMGS.pth' 
-            elif STATE_MODE == "info_vector":
-                PATH = './model/D3QN_SMIV.pth' 
+            PATH = './model/D3QN_SMIV.pth' 
                 
             try:
                 self.model = torch.load(PATH)
