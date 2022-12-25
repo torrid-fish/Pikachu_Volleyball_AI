@@ -420,6 +420,7 @@ def train():
         ACTOR.start()
     
     cnt = 0
+    history_winrt = np.ndarray((0, ACT_NUM))
     while True:
         loss = []
 
@@ -438,6 +439,9 @@ def train():
             target_network = q_network[loss.index(min(loss))]
 
         cnt += 1
+        
+        history_winrt = np.append(history_winrt, np.array([[Pikachu[i].prewinrt for i in range(ACT_NUM)]]), axis=0)
+        np.save("history_winrt.npy", history_winrt)
 
         os.system('cls')
         print(f'epoch = {cnt}')
