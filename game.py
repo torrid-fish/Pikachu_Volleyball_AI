@@ -38,7 +38,7 @@ class Game:
     ### Test
     Currently for test mode, nothing special will be shown.
     """
-    def __init__(self, mode: str, P1_mode: str, P2_mode: str):
+    def __init__(self, mode: str, P1_mode: str, P2_mode: str, resolution_ratio: float):
         # Sanity check
         self.mode_list = ["Train", "Play"]
         if mode not in self.mode_list:
@@ -78,13 +78,13 @@ class Game:
         # Initialize pygame
         pygame.init()
         if mode == "Play":
-            self.resolution_ratio = 2 # The screen is twice larger
+            self.resolution_ratio = resolution_ratio # The screen is twice larger
             self.sx, self.sy = 0, 0
             self.screen = pygame.display.set_mode((self.resolution_ratio * 432, self.resolution_ratio * 304))
         else:
-            self.resolution_ratio = 1.3
+            self.resolution_ratio = resolution_ratio
             self.sx, self.sy = 30, 30
-            self.screen = pygame.display.set_mode((1060 * self.resolution_ratio, 304 * self.resolution_ratio + 2 * 30))
+            self.screen = pygame.display.set_mode((1120 * self.resolution_ratio, 304 * self.resolution_ratio + 2 * 30))
 
         pygame.display.set_caption("Pikachu Volleyball")
  
@@ -200,7 +200,7 @@ class Game:
         # Set the font and font size for the text
         font = pygame.font.Font(None, int(30 * self.resolution_ratio))
         color = [(220, 220, 220), (255, 0, 0)]
-        span = 50
+        span = 50 * self.resolution_ratio / 1.3
         P1 = (
             (1, 0, 1, 0, 0),
             (1, 0, 0, 0, 0),

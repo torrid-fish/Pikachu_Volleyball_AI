@@ -16,12 +16,10 @@ def interactive_initialization():
         if MODE == '2': MODE = 'Train'
 
         # P1
+        player_mode = {'1': 'Human', '2': 'Old_AI', '3': 'D3QN', '4': 'Attacker'}
         print('Input P1 mode: (1: Human / 2: Old_AI / 3: D3QN / 4: Attacker)')
-        P1_MODE = input()
-        if P1_MODE == '1': P1_MODE = 'Human'
-        if P1_MODE == '2': P1_MODE = 'Old_AI'
-        if P1_MODE == '3': P1_MODE = 'D3QN'
-        if P1_MODE == '4': P1_MODE = 'Attacker'
+        P1_MODE = player_mode[input()]
+
         if P1_MODE == "D3QN":
             print('Input the path to the model of P1: ./model/____.pth (only the underline part)')
             P1_TAG = input()
@@ -31,11 +29,8 @@ def interactive_initialization():
         
         # P2
         print('Input P2 mode: (1: Human / 2: Old_AI / 3: D3QN / 4: Attacker)')
-        P2_MODE = input()
-        if P2_MODE == '1': P2_MODE = 'Human'
-        if P2_MODE == '2': P2_MODE = 'Old_AI'
-        if P2_MODE == '3': P2_MODE = 'D3QN'
-        if P2_MODE == '4': P2_MODE = 'Attacker'
+        P2_MODE = player_mode[input()]
+        
         if P2_MODE == "D3QN":
             print('Input the path to the model of P2: ./model/____.pth (only the underline part)')
             P2_TAG = input()
@@ -48,15 +43,24 @@ def interactive_initialization():
         print('Input the path to the model of P2: ./model/____.pth (only the underline part)')
         P2_TAG = input()
         print(f'Okay, the model of P1 will be stored at {P2_TAG}.') 
+
+    if MODE == 'Train':
+        print('By the way, which screen size do you prefer? (1: Medium / 2: Small)')
+        SZ = input()
+        if SZ == '1':
+            RESOLUTION_RATIO = 1.3
+        elif SZ == '2':
+            RESOLUTION_RATIO = 0.8
+    
         
     # Return all infomations    
-    return MODE, P1_MODE, P2_MODE, P1_TAG, P2_TAG
+    return MODE, P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO
 
 def play(P1_MODE, P2_MODE, P1_TAG, P2_TAG):
     # Create players and game
     P1 = Player(P1_MODE, False, P1_TAG)
     P2 = Player(P2_MODE, True, P2_TAG)
-    Pikachu = Game("Play", P1_MODE, P2_MODE)
+    Pikachu = Game("Play", P1_MODE, P2_MODE, 2)
 
     # Get initial state
     state = Pikachu.reset(True)
@@ -67,11 +71,11 @@ def play(P1_MODE, P2_MODE, P1_TAG, P2_TAG):
 
 if __name__ == '__main__':
     # Initialization
-    MODE, P1_MODE, P2_MODE, P1_TAG, P2_TAG = interactive_initialization()
+    MODE, P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO = interactive_initialization()
 
 
     if MODE == "Play":
         play(P1_MODE, P2_MODE, P1_TAG, P2_TAG)
     
     elif MODE == "Train":
-        train(P1_MODE, P2_MODE, P1_TAG, P2_TAG)
+        train(P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO)

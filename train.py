@@ -21,7 +21,7 @@ OUTPUT_DIM = 18
 GAMMA = 0.8
 
 # Size of slice
-BATCH_SIZE = 256
+BATCH_SIZE = 1024
 
 # Number of times to update target network
 UPDATA_TAGESTEP = 10
@@ -30,7 +30,7 @@ UPDATA_TAGESTEP = 10
 REPLAY_MEMORY = 16384
 
 # This should be smaller than `REPLAY_MEMORY` to start learning
-BEGIN_LEARN_SIZE = 512 
+BEGIN_LEARN_SIZE = 2048
 
 # Learning rate
 LEARNING_RATE = 1e-7
@@ -39,7 +39,7 @@ LEARNING_RATE = 1e-7
 BEGIN_EPSILON = 0.2
 
 # Smallest epsilon
-FINAL_EPSILON = 0.0001
+FINAL_EPSILON = 0.001
 
 # Controlling the epsilon
 EXPLORE = 500000
@@ -47,10 +47,10 @@ EXPLORE = 500000
 """
     Train function
 """
-def init(P1_MODE, P2_MODE, P1_TAG, P2_TAG):
+def init(P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO):
     # Create one game and opponent
     P1 = Player(P1_MODE, False, P1_TAG)
-    Pikachu = Game("Train", P1_MODE, P2_MODE)
+    Pikachu = Game("Train", P1_MODE, P2_MODE, RESOLUTION_RATIO)
 
     try:
         network = torch.load(P2_TAG)
@@ -189,9 +189,9 @@ def learner(memory: PER, network, target_network, Pikachu, optimizer, losses):
     loss.backward()
     optimizer.step() 
 
-def train(P1_MODE, P2_MODE, P1_TAG, P2_TAG):
+def train(P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO):
     # Initialize Train Process
-    network, target_network, P1, Pikachu, optimizer, memory, epsilon, winrts, losses = init(P1_MODE, P2_MODE, P1_TAG, P2_TAG)
+    network, target_network, P1, Pikachu, optimizer, memory, epsilon, winrts, losses = init(P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO)
     
     for round in count():
         # Reset environment
