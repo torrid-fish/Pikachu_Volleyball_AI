@@ -91,7 +91,7 @@ class SumTree:
         self.tree = state['tree']
         self.capacity = state['capacity']
         self.data = state['data']
-        self.n_entries = state['n_entires']
+        self.n_entries = state['n_entries']
 
     # update to the root node
     def _propagate(self, idx, change):
