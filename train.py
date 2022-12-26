@@ -57,12 +57,14 @@ def init(P1_MODE, P2_MODE, P1_PATH, P2_PATH):
         target_network = torch.load(P2_PATH)
         memory = torch.load('./memory/' + P2_PATH[8:])
         epsilon = torch.load('./log/' + P2_PATH[8:])['epsilon']
+        pre_result = torch.load('./log/' + P2_PATH[8:])['pre_result']
         winrts = torch.load('./log/' + P2_PATH[8:])['winrts']
         losses = torch.load('./log/' + P2_PATH[8:])['losses']
         print('Load previous data successfully.')
     except FileNotFoundError:
         network = Dueling_D3QN(OUTPUT_DIM)
         target_network = Dueling_D3QN(OUTPUT_DIM)
+        pre_result = []
         memory = PER(REPLAY_MEMORY)
         epsilon = BEGIN_EPSILON
         winrts = []
@@ -73,6 +75,7 @@ def init(P1_MODE, P2_MODE, P1_PATH, P2_PATH):
     Pikachu.epsilon = epsilon
     Pikachu.losses = losses
     Pikachu.winrts = winrts
+    Pikachu.pre_result = pre_result
     Pikachu.tot = len(winrts)
 
     # Set to train mode
@@ -222,4 +225,4 @@ def train(P1_MODE, P2_MODE, P1_PATH, P2_PATH):
             print("Data saved!")
             torch.save(network, P2_PATH)
             torch.save(memory, './memory/' + P2_PATH[8:])
-            torch.save({'losses': losses, 'winrts': winrts, 'epsilon': epsilon}, './log/' + P2_PATH[8:])
+            torch.save({'losses': losses, 'winrts': winrts, 'epsilon': epsilon, 'pre_result': Pikachu.pre_result}, './log/' + P2_PATH[8:])
