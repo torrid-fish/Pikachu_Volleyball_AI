@@ -6,7 +6,12 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from gym_pikachu_volleyball import *
 from gym_pikachu_volleyball.envs.common import *
-from Actions.Old_AI_Action import *
+from gym_pikachu_volleyball.envs import PikachuVolleyballMultiEnv
+from gym_pikachu_volleyball.envs.constants import *
+from gym_pikachu_volleyball.envs.engine import Ball
+from Actions.Old_AI_Action import INFINITE_LOOP_LIMIT, expectedLandingPointXWhenPowerHit
+import random
+
 
 class Game:
     """
@@ -33,7 +38,7 @@ class Game:
     ### Test
     Currently for test mode, nothing special will be shown.
     """
-    def __init__(self, mode: str, P1_mode: str, P2_mode: str, resolution_ratio: float, px: int, py: int):
+    def __init__(self, mode: str, P1_mode: str, P2_mode: str):
         # Sanity check
         self.mode_list = ["Train", "Play"]
         if mode not in self.mode_list:
@@ -52,17 +57,14 @@ class Game:
         self.counter = 0
         self.is_player1_win, self.is_player2_win = 0, 0
         self.beg_time = time.perf_counter()
-        self.score, self.lose_pt = [], []
-        self.pre_score = []
+        self.winrts, self.lose_pt = [], []
         self.P2win, self.tot = 0, 0
         self.last_time = time.perf_counter()
         self.loss = 0
         self.losses = [0]
         self.reward = 0
-        self.rewards = [0]
         self.pre_cal_range = 100
         self.pre_result = []
-        self.avgwinrt = 0
         self.prewinrt = 0
         self.epsilon = 0
         self.is_random = False
@@ -71,52 +73,55 @@ class Game:
         self.env = PikachuVolleyballMultiEnv(render_mode=None)
         # The secene of the back ground
         self.scene = self.env.reset(return_info=True, options={'is_player2_serve': True})
-        
-        self.resolution_ratio = resolution_ratio
 
-        # Setting surface
+        # Initialize pygame
+        pygame.init()
         if mode == "Play":
+            self.resolution_ratio = 2 # The screen is twice larger
             self.sx, self.sy = 0, 0
+            self.screen = pygame.display.set_mode((self.resolution_ratio * 432, self.resolution_ratio * 304))
         else:
-            WIDTH = 1060 * self.resolution_ratio
-            HEIGHT = 304 * self.resolution_ratio	
-            self.sx, self.sy = (px + 1) * 30 + px * WIDTH, (py + 1) * 30 + py * HEIGHT
+            self.resolution_ratio = 1.3
+            self.sx, self.sy = 30, 30
+            self.screen = pygame.display.set_mode((1060 * self.resolution_ratio, 304 * self.resolution_ratio + 2 * 30))
+
+        pygame.display.set_caption("Pikachu Volleyball")
  
     ## Private member ##
 
-    def __draw_background(self, screen):
+    def __draw_background(self):
         # Draw result depends on state
         if self.mode == "Train" or self.status == "Play" or (self.status == "Trans" and self.counter >= 10):
             # Draw background
             base_surface = pygame.surfarray.make_surface(self.scene.transpose((1, 0, 2)))
             base_surface = pygame.transform.scale(base_surface, (self.resolution_ratio * 432, self.resolution_ratio * 304))
-            screen.blit(base_surface, (self.sx, self.sy))
+            self.screen.blit(base_surface, (self.sx, self.sy))
 
         elif self.status == "End" or (self.status == "Trans" and self.counter < 10):
             # Draw background in a reverse color manner
             self.scene = 255 - self.scene
             base_surface = pygame.surfarray.make_surface(self.scene.transpose((1, 0, 2)))
             base_surface = pygame.transform.scale(base_surface, (self.resolution_ratio * 432, self.resolution_ratio * 304))
-            screen.blit(base_surface, (self.sx, self.sy))
+            self.screen.blit(base_surface, (self.sx, self.sy))
 
-    def __draw_P1_win_text(self, screen):
+    def __draw_P1_win_text(self):
         # Set the font and font size for the text
         font = pygame.font.Font(None, int(30*self.resolution_ratio))
         # Draw text
         done_text = font.render(f'P1 WIN.', True, (0, 0, 0))
-        screen.blit(done_text, (75 * self.resolution_ratio + 6 + self.sx, 80 * self.resolution_ratio + 6 + self.sy))
+        self.screen.blit(done_text, (75 * self.resolution_ratio + 6 + self.sx, 80 * self.resolution_ratio + 6 + self.sy))
         done_text = font.render(f'P1 WIN.', True, (255, 255, 255))
-        screen.blit(done_text, (75 * self.resolution_ratio + self.sx, 80 * self.resolution_ratio + self.sy))
+        self.screen.blit(done_text, (75 * self.resolution_ratio + self.sx, 80 * self.resolution_ratio + self.sy))
     
-    def __draw_P2_win_text(self, screen):
+    def __draw_P2_win_text(self):
         # Set the font and font size for the text
         font = pygame.font.Font(None, int(30*self.resolution_ratio))
         done_text = font.render(f'P2 WIN.', True, (0, 0, 0))
-        screen.blit(done_text, (75 * self.resolution_ratio + 6 + self.sx + 216 * self.resolution_ratio, 80 * self.resolution_ratio + 6 + self.sy))
+        self.screen.blit(done_text, (75 * self.resolution_ratio + 6 + self.sx + 216 * self.resolution_ratio, 80 * self.resolution_ratio + 6 + self.sy))
         done_text = font.render(f'P2 WIN.', True, (255, 255, 255))
-        screen.blit(done_text, (75 * self.resolution_ratio + self.sx + 216 * self.resolution_ratio, 80 * self.resolution_ratio + self.sy))
+        self.screen.blit(done_text, (75 * self.resolution_ratio + self.sx + 216 * self.resolution_ratio, 80 * self.resolution_ratio + self.sy))
 
-    def __draw_Trans(self, screen):
+    def __draw_Trans(self):
         if self.status == "Trans":
             surface = pygame.Surface((self.resolution_ratio * 432, self.resolution_ratio * 304))
             if self.counter < 10:
@@ -125,46 +130,46 @@ class Game:
                 opacity = 510 - (self.counter / 10) * 255
             surface.set_alpha(opacity)
             surface.fill((0, 0, 0))
-            screen.blit(surface, (self.sx, self.sy))
+            self.screen.blit(surface, (self.sx, self.sy))
 
-    def __draw_figure(self, fig, screen):
+    def __draw_figure(self, fig):
         canvas = FigureCanvasAgg(fig)
         canvas.draw()
         buf = canvas.buffer_rgba()
         image_width, image_height = canvas.get_width_height()
         surface = pygame.image.frombuffer(buf, (image_width, image_height), 'RGBA')
         surface = pygame.transform.scale(surface, (304 * self.resolution_ratio / image_height * image_width, 304 * self.resolution_ratio / image_height * image_height))
-        screen.blit(surface, (self.sx + 1 * (self.sx + self.resolution_ratio * 432), self.sy))
+        self.screen.blit(surface, (self.sx + 1 * (self.sx + self.resolution_ratio * 432), self.sy))
 
-    def __draw_lose_pt(self, screen):
+    def __draw_lose_pt(self):
         font = pygame.font.Font(None, int(30*self.resolution_ratio))
         for pt in self.lose_pt:
             text = font.render(f'X', True, (255, 0, 0))
             ptrect = text.get_rect(center=(self.sx + pt * self.resolution_ratio, 280 * self.resolution_ratio + self.sy))
-            screen.blit(text, ptrect)
+            self.screen.blit(text, ptrect)
 
-    def __draw_fall_pt(self, screen):
+    def __draw_fall_pt(self):
         font = pygame.font.Font(None, int(30*self.resolution_ratio))
         fallx = self.env.engine.ball.expected_landing_point_x
 
         text = font.render(f'V', True, (0, 0, 0))
         ptrect = text.get_rect(center=(self.sx + fallx * self.resolution_ratio, 280 * self.resolution_ratio + self.sy))
-        screen.blit(text, ptrect)
+        self.screen.blit(text, ptrect)
 
-    def __draw_player(self, screen):
+    def __draw_player(self):
         # Set the font and font size for the text
         font = pygame.font.Font(None, int(30 * self.resolution_ratio))
         text = font.render(f'{self.P1_mode}', True, (0, 0, 0))
         P1_rect = text.get_rect(center=(432 * self.resolution_ratio / 4 + self.sx, 292 * self.resolution_ratio + self.sy))
-        screen.blit(text, P1_rect)
+        self.screen.blit(text, P1_rect)
         text = font.render(f'{self.P2_mode}', True, (0, 0, 0))
         P2_rect = text.get_rect(center=(432 * self.resolution_ratio * 3 / 4 + self.sx, 292 * self.resolution_ratio + self.sy))
-        screen.blit(text, P2_rect)
+        self.screen.blit(text, P2_rect)
 
-    def __draw_info(self, screen):
-        surface = pygame.Surface((190 * self.resolution_ratio, self.resolution_ratio * (304 + 30)))
+    def __draw_info(self):
+        surface = pygame.Surface((400, self.resolution_ratio * 304))
         surface.fill((0, 0, 0))
-        screen.blit(surface, (self.sx + (30 + 2 * self.resolution_ratio * 432), self.sy))
+        self.screen.blit(surface, (2 * (30 + self.resolution_ratio * 432), 30))
         font = pygame.font.Font(None, int(20 * self.resolution_ratio))
 
         curtime = time.gmtime(time.perf_counter() - self.beg_time)
@@ -173,13 +178,12 @@ class Game:
         f'Speed(round/s): {self.tot / (time.perf_counter() - self.beg_time):.2f}', 
         f'Speed(frm/s): {1 / (time.perf_counter() - self.last_time):.2f}',
         f'== P2 info ==',
-        f'avg win rate: {self.avgwinrt:.2f}', 
         f'pre win rate: {self.prewinrt:.2f}',
         f'== Train info ==',
         f'round: {self.tot}',
         f'time: {curtime.tm_hour:02d}:{curtime.tm_min:02d}:{curtime.tm_sec:02d}',
         f'loss: {self.loss:.6f}',
-        f'reward: {self.rewards[-1]:.6f}',
+        f'reward: {self.reward:.6f}',
         f'epsilon: {self.epsilon:.6f}'
         ]
         
@@ -188,14 +192,14 @@ class Game:
         for sentence in message:
             text = font.render(sentence, True, (255, 255, 255))
             if cnt == 0: h = text.get_height()
-            screen.blit(text, (self.sx + (30 + 2 * self.resolution_ratio * 432), self.sy + cnt * h))
+            self.screen.blit(text, (2 * (30 + self.resolution_ratio * 432), 30 + cnt * h))
             cnt += 2    
 
-    def __draw_control(self, drawP1: bool, P1_act: int, drawP2: bool, P2_act: int, screen):
+    def __draw_control(self, drawP1: bool, P1_act: int, drawP2: bool, P2_act: int):
         # Set the font and font size for the text
         font = pygame.font.Font(None, int(30 * self.resolution_ratio))
         color = [(220, 220, 220), (255, 0, 0)]
-        span = 50 / 1.3 * self.resolution_ratio
+        span = 50
         P1 = (
             (1, 0, 1, 0, 0),
             (1, 0, 0, 0, 0),
@@ -244,11 +248,11 @@ class Game:
             right = font.render('>', True, color[isright])
             left = font.render('<', True, color[isleft])
             mid = up.get_rect(center=(432 * self.resolution_ratio / 4 + self.sx, 292 * self.resolution_ratio / 8 + self.sy))
-            screen.blit(up, mid)
-            screen.blit(power, (mid[0] - span, mid[1]       ))
-            screen.blit(down,  (mid[0]       , mid[1] + span))
-            screen.blit(right, (mid[0] + span, mid[1] + span))
-            screen.blit(left,  (mid[0] - span, mid[1] + span))
+            self.screen.blit(up, mid)
+            self.screen.blit(power, (mid[0] - span, mid[1]       ))
+            self.screen.blit(down,  (mid[0]       , mid[1] + span))
+            self.screen.blit(right, (mid[0] + span, mid[1] + span))
+            self.screen.blit(left,  (mid[0] - span, mid[1] + span))
         if drawP2:
             isright, isleft, isup, isdown, ispower = P2[P2_act]
             power = font.render('P', True, color[ispower])
@@ -257,57 +261,65 @@ class Game:
             right = font.render('>', True, color[isright])
             left = font.render('<', True, color[isleft])
             mid = up.get_rect(center=(432 * self.resolution_ratio * 3 / 4 + self.sx, 292 * self.resolution_ratio / 8 + self.sy))
-            screen.blit(up, mid)
-            screen.blit(power, (mid[0] - span, mid[1]       ))
-            screen.blit(down,  (mid[0]       , mid[1] + span))
-            screen.blit(right, (mid[0] + span, mid[1] + span))
-            screen.blit(left,  (mid[0] - span, mid[1] + span))
+            self.screen.blit(up, mid)
+            self.screen.blit(power, (mid[0] - span, mid[1]       ))
+            self.screen.blit(down,  (mid[0]       , mid[1] + span))
+            self.screen.blit(right, (mid[0] + span, mid[1] + span))
+            self.screen.blit(left,  (mid[0] - span, mid[1] + span))
             if self.is_random:
                 rand = font.render('R', True, (0, 0, 0))
-                screen.blit(rand,  (mid[0] + span, mid[1]))
+                self.screen.blit(rand,  (mid[0] + span, mid[1]))
 
     def __update_winrt(self):
         # Calculate average win rate
         if self.tot:
-            self.avgwinrt = (self.P2win + self.is_player2_win) / (self.tot + 1)
+            avgwinrt = (self.P2win + self.is_player2_win) / (self.tot + 1)
         else:
-            self.avgwinrt = 0
+            avgwinrt = 0
                 
         # Calculate previous win rate
         if self.tot < self.pre_cal_range:
-            self.prewinrt = self.avgwinrt
+            self.prewinrt = avgwinrt
         else:
             self.prewinrt = np.sum(self.pre_result[-self.pre_cal_range:]) / self.pre_cal_range
 
         # Update win rate list (for plotting)
-        self.score += [self.avgwinrt]
         if self.tot < self.pre_cal_range:
-            self.pre_score += [self.avgwinrt]
+            self.winrts += [avgwinrt]
         else:
-            self.pre_score += [self.prewinrt]
+            self.winrts += [self.prewinrt]
 
         # Update other elements
         self.P2win += self.is_player2_win
         self.pre_result += [self.is_player2_win]
 
-    def __update_train(self, P1_act, P2_act, screen):
+    def __update_train(self, P1_act, P2_act):
         # Move to next state
         action = [P1_act, P2_act]
         self.scene, self.reward, self.done, _, _ = self.env.step(action)   
 
         ### Begin: Draw infomations ###
-        self.__draw_background(screen)
+        self.__draw_background()
 
-        self.__draw_player(screen)
+        self.__draw_player()
 
-        self.__draw_info(screen)
+        self.__draw_info()
 
-        self.__draw_lose_pt(screen)
+        self.__draw_lose_pt()
 
-        self.__draw_fall_pt(screen)
+        self.__draw_fall_pt()
 
-        self.__draw_control(True, P1_act, True, P2_act, screen)
+        self.__draw_control(True, P1_act, True, P2_act)
         ### End: Draw infomations ###
+
+        # Update the window
+        pygame.display.flip()
+
+        # If the window was closed, end the game
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
         
         # Go to next status
         self.counter += 1
@@ -322,26 +334,20 @@ class Game:
                 # Draw plot
                 fig = Figure()
                 # Plot P2 win rate
-                ax1 = fig.add_subplot(3, 1, 1)
-                ax1.plot(self.score)
-                ax1.plot(self.pre_score)
-                ax1.legend(['avg', f'pre{self.pre_cal_range}'])
+                ax1 = fig.add_subplot(2, 1, 1)
+                ax1.plot(self.winrts)
                 ax1.set_ylim(0, 1.1)
                 ax1.set_title('P2 Win rate')
-                # Plot final reward value
-                ax2 = fig.add_subplot(3, 1, 2)
-                ax2.plot(self.rewards)
-                ax2.set_title('Reward')
-                # Plot final reward value
-                ax3 = fig.add_subplot(3, 1, 3)
-                ax3.plot(self.losses)
-                ax3.set_title('Loss')
-                ax3.set_xlabel('Round')
+                ax1.set_xlabel('Round')
+                ax2 = fig.add_subplot(2, 1, 2)
+                ax2.plot(self.losses)
+                ax2.set_title('Loss')
+                ax2.set_xlabel('Frame')
                 # Set padding
                 fig.tight_layout(pad=0.5)
-                self.__draw_figure(fig, screen)
+                self.__draw_figure(fig)
 
-    def __update_play(self, P1_act, P2_act, screen):
+    def __update_play(self, P1_act, P2_act):
         # Move to next state
         if self.status != "Trans":
             action = [P1_act, P2_act]
@@ -350,20 +356,28 @@ class Game:
         self.scene, self.reward, self.done, _, _ = self.env.step(action)   
 
         ### Begin: Draw infomations ###
-        self.__draw_background(screen)
+        self.__draw_background()
 
         if self.is_player1_win == 1 and not(self.status == "Trans" and self.counter > 10):
-            self.__draw_P1_win_text(screen)
+            self.__draw_P1_win_text()
 
         if self.is_player2_win == 1 and not(self.status == "Trans" and self.counter > 10):
-            self.__draw_P2_win_text(screen)
+            self.__draw_P2_win_text()
 
-        self.__draw_player(screen)
+        self.__draw_player()
 
-        self.__draw_control(True, P1_act, True, P2_act, screen)
-
-        self.__draw_Trans(screen) # Draw after everything is drawn
+        self.__draw_Trans() # Draw after everything is drawn
         ### End: Draw infomations ###
+
+        # Update the window
+        pygame.display.flip()
+        time.sleep(1.0 / self.fps)
+
+        # If the window was closed, end the game
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
         
         # Go to next status
         self.counter += 1
@@ -393,18 +407,28 @@ class Game:
     def __get_reward_depends_on_power_hit(self, P2_act):
         player, ball, theOtherPlayer, userInput = self.env.engine.players[1], self.env.engine.ball, self.env.engine.players[0], convert_to_user_input(P2_act, 1)
         y_dirs = [0, -1, 1] if random.randrange(2) else [1, 0, -1]
-
+        reward = 0
+        should_power_hit = False
         for xDirection in [1, 0]:
             for yDirection in y_dirs:
                 expected_landing_point_x = expectedLandingPointXWhenPowerHit(xDirection, yDirection, ball)
                 if (expected_landing_point_x <= int(player.is_player2) * GROUND_HALF_WIDTH or\
                     expected_landing_point_x >= int(player.is_player2) * GROUND_WIDTH + GROUND_HALF_WIDTH) and\
                     abs(expected_landing_point_x - theOtherPlayer.x) > PLAYER_LENGTH:
-                        reward = int(userInput.x_direction == xDirection) +\
-                                int(userInput.y_direction == yDirection) +\
-                                int(userInput.power_hit == True)
-                        return reward / 100, True
-        return int(userInput.power_hit == False) / 100, False
+                        reward += int(userInput.x_direction == xDirection) +\
+                                  int(userInput.y_direction == yDirection) +\
+                                  int(userInput.power_hit == True)
+                        should_power_hit = True
+                elif (expected_landing_point_x > int(player.is_player2) * GROUND_HALF_WIDTH or\
+                    expected_landing_point_x < int(player.is_player2) * GROUND_WIDTH + GROUND_HALF_WIDTH) and\
+                    yDirection == 1:
+                        reward -= (
+                            int(userInput.x_direction == xDirection) +\
+                            int(userInput.y_direction == yDirection) +\
+                            int(userInput.power_hit == True)
+                        ) * 5
+        reward += int(userInput.power_hit == False)
+        return reward / 100, should_power_hit
 
     def __get_reward_by_user_input(self, P2_act):
         player, ball, theOtherPlayer, userInput = self.env.engine.players[1], self.env.engine.ball, self.env.engine.players[0], convert_to_user_input(P2_act, 1)
@@ -537,7 +561,7 @@ class Game:
             self.is_player1_win, self.is_player2_win = 0, 0
         return state
 
-    def update(self, P1_act, P2_act, screen) -> tuple[int, list]:
+    def update(self, P1_act, P2_act) -> tuple[int, list]:
         """
         This function will return `reward, next_state, done`.
         """
@@ -545,14 +569,13 @@ class Game:
         self.__update_expected_landing_point_x(self.env.engine.ball)
 
         if self.mode == "Train":
-            self.__update_train(P1_act, P2_act, screen)
+            self.__update_train(P1_act, P2_act)
 
         elif self.mode == "Play":
-            self.__update_play(P1_act, P2_act, screen)
+            self.__update_play(P1_act, P2_act)
 
         # Add small rewards
         reward = self.reward + self.__get_reward_by_user_input(P2_act)
-        self.rewards += [reward]
         self.losses += [self.loss]
 
         return reward, self.__cal_state(), self.done

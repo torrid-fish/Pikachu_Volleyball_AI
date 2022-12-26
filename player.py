@@ -25,6 +25,7 @@ class Player:
         self.isPlayer2 = isPlayer2
         
         if player == "D3QN":
+            # Try to load stored model.
             try:
                 self.model = torch.load(PATH)
                 print("Model loaded sucessfully.")

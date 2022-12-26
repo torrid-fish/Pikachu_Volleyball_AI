@@ -1,79 +1,8 @@
-import random
-from collections import deque
-import numpy as np
-from torch.nn import functional as F
+from network import Dueling_D3QN
 import torch
-import torch.nn as nn
-from gym_pikachu_volleyball.envs.constants import *
 
-# The device we used (either CPU or GPU)
-if torch.cuda.is_available():
-    device = "cuda:0"
-    print("GPU is used.")
-else:
-    device = "cpu"
-    print("CPU is used.")
-
-class Conv2d(nn.Conv2d):
-    print("weight!")
-
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1,
-                 padding=0, dilation=1, groups=1, bias=True):
-        super(Conv2d, self).__init__(in_channels, out_channels, kernel_size, stride,
-                 padding, dilation, groups, bias)
-
-    def forward(self, x):
-        weight = self.weight
-        weight_mean = weight.mean(dim=1, keepdim=True).mean(dim=2,
-                                  keepdim=True).mean(dim=3, keepdim=True)
-        weight = weight - weight_mean
-        std = weight.view(weight.size(0), -1).std(dim=1).view(-1, 1, 1, 1) + 1e-5
-        weight = weight / std.expand_as(weight)
-        return F.conv2d(x, weight, self.bias, self.stride,
-                        self.padding, self.dilation, self.groups)
-
-class Dueling_D3QN(nn.Module):
-    def __init__(self, action_dim):
-        super(Dueling_D3QN, self).__init__()
-
-        self.f1 = nn.Linear(17, 512)
-
-        self.val_hidden = nn.Linear(512, 256)
-        self.adv_hidden = nn.Linear(512, 256)
-
-        self.val = nn.Linear(256, 1) # State value
-        self.adv = nn.Linear(256, action_dim) # Advantage value
-
-        torch.nn.init.normal_(self.val_hidden.weight, 0, 0.02)
-        torch.nn.init.normal_(self.val.weight, 0, 0.02)
-        torch.nn.init.normal_(self.adv_hidden.weight, 0, 0.02)
-        torch.nn.init.normal_(self.adv.weight, 0, 0.02)
-
-    def forward(self, x):
-        x = torch.reshape(x, (-1, 17)) 
-
-        x = self.f1(x)
-        x = F.relu(x)
-
-        val_hidden = self.val_hidden(x)
-        val_hidden = F.relu(val_hidden)
-
-        adv_hidden = self.adv_hidden(x)
-        adv_hidden = F.relu(adv_hidden)
-
-        val = self.val(val_hidden)
-        adv = self.adv(adv_hidden)
-
-        adv_ave = torch.mean(adv, axis=1, keepdim=True)
-
-        x = adv + val - adv_ave
-        return x
-
-    def select_action(self, state):
-        with torch.no_grad():
-            Q = self.forward(state)
-            action_index = torch.argmax(Q)
-        return action_index.item()
+# Choose CPU or GPU
+device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
 def d3qn_act(isPlayer2: bool, state, model: Dueling_D3QN) -> int:
     # Flip state for other side, assume we always let computer at right side (P2)
@@ -108,5 +37,3 @@ def d3qn_act(isPlayer2: bool, state, model: Dueling_D3QN) -> int:
     model = model.to(device)
     # Get the model
     return model.select_action(state)
-
-

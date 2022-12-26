@@ -60,6 +60,8 @@ def attacker_act(env: PikachuVolleyballMultiEnv):
             ball.y_velocity = random.randrange(0, 20)
             ball.x = random.randrange(40, GROUND_HALF_WIDTH - 40)
             ball.y = random.randrange(60, BALL_TOUCHING_GROUND_Y_COORD - 40)
+
+            ball.is_power_hit = random.randrange(0, 1)
             
             update_expected_landing_point_x(ball)
 
