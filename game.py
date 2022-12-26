@@ -63,6 +63,7 @@ class Game:
         self.loss = 0
         self.losses = [0]
         self.reward = 0
+        self.adjusted_reward = 0
         self.pre_cal_range = 100
         self.pre_result = []
         self.prewinrt = 0
@@ -183,7 +184,7 @@ class Game:
         f'round: {self.tot}',
         f'time: {curtime.tm_hour:02d}:{curtime.tm_min:02d}:{curtime.tm_sec:02d}',
         f'loss: {self.loss:.6f}',
-        f'reward: {self.reward:.6f}',
+        f'reward: {self.adjusted_reward:.6f}',
         f'epsilon: {self.epsilon:.6f}'
         ]
         
@@ -575,7 +576,7 @@ class Game:
             self.__update_play(P1_act, P2_act)
 
         # Add small rewards
-        self.reward = self.reward + self.__get_reward_by_user_input(P2_act)
+        self.adjusted_reward = self.reward + self.__get_reward_by_user_input(P2_act)
         self.losses += [self.loss]
 
-        return self.reward, self.__cal_state(), self.done
+        return self.adjusted_reward, self.__cal_state(), self.done
