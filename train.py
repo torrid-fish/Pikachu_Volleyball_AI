@@ -18,7 +18,7 @@ INPUT_DIM = 17
 OUTPUT_DIM = 18
 
 # Reward gamma
-GAMMA = 0.99
+GAMMA = 0.8
 
 # Size of slice
 BATCH_SIZE = 256
@@ -33,33 +33,33 @@ REPLAY_MEMORY = 16384
 BEGIN_LEARN_SIZE = 512 
 
 # Learning rate
-LEARNING_RATE = 0.01
+LEARNING_RATE = 1e-7
 
 # Begin value of epsilon
 BEGIN_EPSILON = 0.2
 
 # Smallest epsilon
-FINAL_EPSILON = 0.0001 
+FINAL_EPSILON = 0.0001
 
 # Controlling the epsilon
-EXPLORE = 5000000 
+EXPLORE = 500000
 
 """
     Train function
 """
-def init(P1_MODE, P2_MODE, P1_PATH, P2_PATH):
+def init(P1_MODE, P2_MODE, P1_TAG, P2_TAG):
     # Create one game and opponent
-    P1 = Player(P1_MODE, False, P1_PATH)
+    P1 = Player(P1_MODE, False, P1_TAG)
     Pikachu = Game("Train", P1_MODE, P2_MODE)
 
     try:
-        network = torch.load(P2_PATH)
-        target_network = torch.load(P2_PATH)
-        memory = torch.load('./memory/' + P2_PATH[8:])
-        epsilon = torch.load('./log/' + P2_PATH[8:])['epsilon']
-        pre_result = torch.load('./log/' + P2_PATH[8:])['pre_result']
-        winrts = torch.load('./log/' + P2_PATH[8:])['winrts']
-        losses = torch.load('./log/' + P2_PATH[8:])['losses']
+        network = torch.load(P2_TAG)
+        target_network = torch.load(P2_TAG)
+        memory = torch.load('./memory/' + P2_TAG + '.pth')
+        epsilon = torch.load('./log/' + P2_TAG + '.pth')['epsilon']
+        pre_result = torch.load('./log/' + P2_TAG + '.pth')['pre_result']
+        winrts = torch.load('./log/' + P2_TAG + '.pth')['winrts']
+        losses = torch.load('./log/' + P2_TAG + '.pth')['losses']
         print('Load previous data successfully.')
     except FileNotFoundError:
         network = Dueling_D3QN(OUTPUT_DIM)
@@ -90,7 +90,7 @@ def init(P1_MODE, P2_MODE, P1_PATH, P2_PATH):
     # Gradiant Optimizer ADAM
     optimizer = torch.optim.Adam(network.parameters(), lr=LEARNING_RATE)
 
-    return network, target_network, P1, Pikachu, optimizer, memory, epsilon, winrts, losses, id
+    return network, target_network, P1, Pikachu, optimizer, memory, epsilon, winrts, losses
 
 def actor(network, target_network, P1, Pikachu, memory: PER, state, epsilon):
     p = random.random()
@@ -175,6 +175,7 @@ def learner(memory: PER, network, target_network, Pikachu, optimizer, losses):
     
     
     loss = (torch.tensor(is_weight, dtype= torch.float32).to(device) * F.mse_loss(Q_target, Q_pred)).mean()
+    # loss = F.mse_loss(Q_target, Q_pred)
 
     # Update priority in sum tree
     errors = np.abs((Q_target - Q_pred).data.cpu().numpy())
@@ -188,9 +189,9 @@ def learner(memory: PER, network, target_network, Pikachu, optimizer, losses):
     loss.backward()
     optimizer.step() 
 
-def train(P1_MODE, P2_MODE, P1_PATH, P2_PATH):
+def train(P1_MODE, P2_MODE, P1_TAG, P2_TAG):
     # Initialize Train Process
-    network, target_network, P1, Pikachu, optimizer, memory, epsilon, winrts, losses, id = init(P1_MODE, P2_MODE, P1_PATH, P2_PATH)
+    network, target_network, P1, Pikachu, optimizer, memory, epsilon, winrts, losses = init(P1_MODE, P2_MODE, P1_TAG, P2_TAG)
     
     for round in count():
         # Reset environment
@@ -223,6 +224,6 @@ def train(P1_MODE, P2_MODE, P1_PATH, P2_PATH):
         # With enough game round, we save trained model.
         if round % UPDATA_TAGESTEP == 0 and round != 0 and memory.size() >= BEGIN_LEARN_SIZE:
             print("Data saved!")
-            torch.save(network, P2_PATH)
-            torch.save(memory, './memory/' + P2_PATH[8:])
-            torch.save({'losses': losses, 'winrts': winrts, 'epsilon': epsilon, 'pre_result': Pikachu.pre_result}, './log/' + P2_PATH[8:])
+            torch.save(network, './model/' + P2_TAG + '.pth')
+            torch.save(memory, './memory/' + P2_TAG + '.pth')
+            torch.save({'losses': losses, 'winrts': winrts, 'epsilon': epsilon, 'pre_result': Pikachu.pre_result}, './log/' + P2_TAG + '.pth')
