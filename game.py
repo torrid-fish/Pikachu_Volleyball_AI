@@ -33,7 +33,7 @@ class Game:
     ### Test
     Currently for test mode, nothing special will be shown.
     """
-    def __init__(self, mode: str, P1_mode: str, P2_mode: str):
+    def __init__(self, mode: str, P1_mode: str, P2_mode: str, resolution_ratio: float, px: int, py: int):
         # Sanity check
         self.mode_list = ["Train", "Play"]
         if mode not in self.mode_list:
@@ -71,55 +71,52 @@ class Game:
         self.env = PikachuVolleyballMultiEnv(render_mode=None)
         # The secene of the back ground
         self.scene = self.env.reset(return_info=True, options={'is_player2_serve': True})
+        
+        self.resolution_ratio = resolution_ratio
 
-        # Initialize pygame
-        # pygame.init()
+        # Setting surface
         if mode == "Play":
-            self.resolution_ratio = 2 # The screen is twice larger
             self.sx, self.sy = 0, 0
-            self.screen = pygame.display.set_mode((self.resolution_ratio * 432, self.resolution_ratio * 304))
         else:
-            self.resolution_ratio = 1.3
-            self.sx, self.sy = 30, 30
-            # self.screen = pygame.display.set_mode((1060 * self.resolution_ratio, 304 * self.resolution_ratio + 2 * 30))
-
-        # pygame.display.set_caption("Pikachu Volleyball")
+            WIDTH = 1060 * self.resolution_ratio
+            HEIGHT = 304 * self.resolution_ratio	
+            self.sx, self.sy = (px + 1) * 30 + px * WIDTH, (py + 1) * 30 + py * HEIGHT
  
     ## Private member ##
 
-    def __draw_background(self):
+    def __draw_background(self, screen):
         # Draw result depends on state
         if self.mode == "Train" or self.status == "Play" or (self.status == "Trans" and self.counter >= 10):
             # Draw background
             base_surface = pygame.surfarray.make_surface(self.scene.transpose((1, 0, 2)))
             base_surface = pygame.transform.scale(base_surface, (self.resolution_ratio * 432, self.resolution_ratio * 304))
-            self.screen.blit(base_surface, (self.sx, self.sy))
+            screen.blit(base_surface, (self.sx, self.sy))
 
         elif self.status == "End" or (self.status == "Trans" and self.counter < 10):
             # Draw background in a reverse color manner
             self.scene = 255 - self.scene
             base_surface = pygame.surfarray.make_surface(self.scene.transpose((1, 0, 2)))
             base_surface = pygame.transform.scale(base_surface, (self.resolution_ratio * 432, self.resolution_ratio * 304))
-            self.screen.blit(base_surface, (self.sx, self.sy))
+            screen.blit(base_surface, (self.sx, self.sy))
 
-    def __draw_P1_win_text(self):
+    def __draw_P1_win_text(self, screen):
         # Set the font and font size for the text
         font = pygame.font.Font(None, int(30*self.resolution_ratio))
         # Draw text
         done_text = font.render(f'P1 WIN.', True, (0, 0, 0))
-        self.screen.blit(done_text, (75 * self.resolution_ratio + 6 + self.sx, 80 * self.resolution_ratio + 6 + self.sy))
+        screen.blit(done_text, (75 * self.resolution_ratio + 6 + self.sx, 80 * self.resolution_ratio + 6 + self.sy))
         done_text = font.render(f'P1 WIN.', True, (255, 255, 255))
-        self.screen.blit(done_text, (75 * self.resolution_ratio + self.sx, 80 * self.resolution_ratio + self.sy))
+        screen.blit(done_text, (75 * self.resolution_ratio + self.sx, 80 * self.resolution_ratio + self.sy))
     
-    def __draw_P2_win_text(self):
+    def __draw_P2_win_text(self, screen):
         # Set the font and font size for the text
         font = pygame.font.Font(None, int(30*self.resolution_ratio))
         done_text = font.render(f'P2 WIN.', True, (0, 0, 0))
-        self.screen.blit(done_text, (75 * self.resolution_ratio + 6 + self.sx + 216 * self.resolution_ratio, 80 * self.resolution_ratio + 6 + self.sy))
+        screen.blit(done_text, (75 * self.resolution_ratio + 6 + self.sx + 216 * self.resolution_ratio, 80 * self.resolution_ratio + 6 + self.sy))
         done_text = font.render(f'P2 WIN.', True, (255, 255, 255))
-        self.screen.blit(done_text, (75 * self.resolution_ratio + self.sx + 216 * self.resolution_ratio, 80 * self.resolution_ratio + self.sy))
+        screen.blit(done_text, (75 * self.resolution_ratio + self.sx + 216 * self.resolution_ratio, 80 * self.resolution_ratio + self.sy))
 
-    def __draw_Trans(self):
+    def __draw_Trans(self, screen):
         if self.status == "Trans":
             surface = pygame.Surface((self.resolution_ratio * 432, self.resolution_ratio * 304))
             if self.counter < 10:
@@ -128,46 +125,46 @@ class Game:
                 opacity = 510 - (self.counter / 10) * 255
             surface.set_alpha(opacity)
             surface.fill((0, 0, 0))
-            self.screen.blit(surface, (self.sx, self.sy))
+            screen.blit(surface, (self.sx, self.sy))
 
-    def __draw_figure(self, fig):
+    def __draw_figure(self, fig, screen):
         canvas = FigureCanvasAgg(fig)
         canvas.draw()
         buf = canvas.buffer_rgba()
         image_width, image_height = canvas.get_width_height()
         surface = pygame.image.frombuffer(buf, (image_width, image_height), 'RGBA')
         surface = pygame.transform.scale(surface, (304 * self.resolution_ratio / image_height * image_width, 304 * self.resolution_ratio / image_height * image_height))
-        self.screen.blit(surface, (self.sx + 1 * (self.sx + self.resolution_ratio * 432), self.sy))
+        screen.blit(surface, (self.sx + 1 * (self.sx + self.resolution_ratio * 432), self.sy))
 
-    def __draw_lose_pt(self):
+    def __draw_lose_pt(self, screen):
         font = pygame.font.Font(None, int(30*self.resolution_ratio))
         for pt in self.lose_pt:
             text = font.render(f'X', True, (255, 0, 0))
             ptrect = text.get_rect(center=(self.sx + pt * self.resolution_ratio, 280 * self.resolution_ratio + self.sy))
-            self.screen.blit(text, ptrect)
+            screen.blit(text, ptrect)
 
-    def __draw_fall_pt(self):
+    def __draw_fall_pt(self, screen):
         font = pygame.font.Font(None, int(30*self.resolution_ratio))
         fallx = self.env.engine.ball.expected_landing_point_x
 
         text = font.render(f'V', True, (0, 0, 0))
         ptrect = text.get_rect(center=(self.sx + fallx * self.resolution_ratio, 280 * self.resolution_ratio + self.sy))
-        self.screen.blit(text, ptrect)
+        screen.blit(text, ptrect)
 
-    def __draw_player(self):
+    def __draw_player(self, screen):
         # Set the font and font size for the text
         font = pygame.font.Font(None, int(30 * self.resolution_ratio))
         text = font.render(f'{self.P1_mode}', True, (0, 0, 0))
         P1_rect = text.get_rect(center=(432 * self.resolution_ratio / 4 + self.sx, 292 * self.resolution_ratio + self.sy))
-        self.screen.blit(text, P1_rect)
+        screen.blit(text, P1_rect)
         text = font.render(f'{self.P2_mode}', True, (0, 0, 0))
         P2_rect = text.get_rect(center=(432 * self.resolution_ratio * 3 / 4 + self.sx, 292 * self.resolution_ratio + self.sy))
-        self.screen.blit(text, P2_rect)
+        screen.blit(text, P2_rect)
 
-    def __draw_info(self):
-        surface = pygame.Surface((400, self.resolution_ratio * 304))
+    def __draw_info(self, screen):
+        surface = pygame.Surface((190 * self.resolution_ratio, self.resolution_ratio * (304 + 30)))
         surface.fill((0, 0, 0))
-        self.screen.blit(surface, (2 * (30 + self.resolution_ratio * 432), 30))
+        screen.blit(surface, (self.sx + (30 + 2 * self.resolution_ratio * 432), self.sy))
         font = pygame.font.Font(None, int(20 * self.resolution_ratio))
 
         curtime = time.gmtime(time.perf_counter() - self.beg_time)
@@ -191,14 +188,14 @@ class Game:
         for sentence in message:
             text = font.render(sentence, True, (255, 255, 255))
             if cnt == 0: h = text.get_height()
-            self.screen.blit(text, (2 * (30 + self.resolution_ratio * 432), 30 + cnt * h))
+            screen.blit(text, (self.sx + (30 + 2 * self.resolution_ratio * 432), self.sy + cnt * h))
             cnt += 2    
 
-    def __draw_control(self, drawP1: bool, P1_act: int, drawP2: bool, P2_act: int):
+    def __draw_control(self, drawP1: bool, P1_act: int, drawP2: bool, P2_act: int, screen):
         # Set the font and font size for the text
         font = pygame.font.Font(None, int(30 * self.resolution_ratio))
         color = [(220, 220, 220), (255, 0, 0)]
-        span = 50
+        span = 50 / 1.3 * self.resolution_ratio
         P1 = (
             (1, 0, 1, 0, 0),
             (1, 0, 0, 0, 0),
@@ -247,11 +244,11 @@ class Game:
             right = font.render('>', True, color[isright])
             left = font.render('<', True, color[isleft])
             mid = up.get_rect(center=(432 * self.resolution_ratio / 4 + self.sx, 292 * self.resolution_ratio / 8 + self.sy))
-            self.screen.blit(up, mid)
-            self.screen.blit(power, (mid[0] - span, mid[1]       ))
-            self.screen.blit(down,  (mid[0]       , mid[1] + span))
-            self.screen.blit(right, (mid[0] + span, mid[1] + span))
-            self.screen.blit(left,  (mid[0] - span, mid[1] + span))
+            screen.blit(up, mid)
+            screen.blit(power, (mid[0] - span, mid[1]       ))
+            screen.blit(down,  (mid[0]       , mid[1] + span))
+            screen.blit(right, (mid[0] + span, mid[1] + span))
+            screen.blit(left,  (mid[0] - span, mid[1] + span))
         if drawP2:
             isright, isleft, isup, isdown, ispower = P2[P2_act]
             power = font.render('P', True, color[ispower])
@@ -260,14 +257,14 @@ class Game:
             right = font.render('>', True, color[isright])
             left = font.render('<', True, color[isleft])
             mid = up.get_rect(center=(432 * self.resolution_ratio * 3 / 4 + self.sx, 292 * self.resolution_ratio / 8 + self.sy))
-            self.screen.blit(up, mid)
-            self.screen.blit(power, (mid[0] - span, mid[1]       ))
-            self.screen.blit(down,  (mid[0]       , mid[1] + span))
-            self.screen.blit(right, (mid[0] + span, mid[1] + span))
-            self.screen.blit(left,  (mid[0] - span, mid[1] + span))
+            screen.blit(up, mid)
+            screen.blit(power, (mid[0] - span, mid[1]       ))
+            screen.blit(down,  (mid[0]       , mid[1] + span))
+            screen.blit(right, (mid[0] + span, mid[1] + span))
+            screen.blit(left,  (mid[0] - span, mid[1] + span))
             if self.is_random:
                 rand = font.render('R', True, (0, 0, 0))
-                self.screen.blit(rand,  (mid[0] + span, mid[1]))
+                screen.blit(rand,  (mid[0] + span, mid[1]))
 
     def __update_winrt(self):
         # Calculate average win rate
@@ -293,33 +290,24 @@ class Game:
         self.P2win += self.is_player2_win
         self.pre_result += [self.is_player2_win]
 
-    def __update_train(self, P1_act, P2_act):
+    def __update_train(self, P1_act, P2_act, screen):
         # Move to next state
         action = [P1_act, P2_act]
         self.scene, self.reward, self.done, _, _ = self.env.step(action)   
 
         ### Begin: Draw infomations ###
-        # self.__draw_background()
+        self.__draw_background(screen)
 
-        # self.__draw_player()
+        self.__draw_player(screen)
 
-        # self.__draw_info()
+        self.__draw_info(screen)
 
-        # self.__draw_lose_pt()
+        self.__draw_lose_pt(screen)
 
-        # self.__draw_fall_pt()
+        self.__draw_fall_pt(screen)
 
-        # self.__draw_control(True, P1_act, True, P2_act)
+        self.__draw_control(True, P1_act, True, P2_act, screen)
         ### End: Draw infomations ###
-
-        # Update the window
-        # pygame.display.flip()
-
-        # If the window was closed, end the game
-        # for event in pygame.event.get():
-        #     if event.type == pygame.QUIT:
-        #         pygame.quit()
-        #        sys.exit()
         
         # Go to next status
         self.counter += 1
@@ -351,9 +339,9 @@ class Game:
                 ax3.set_xlabel('Round')
                 # Set padding
                 fig.tight_layout(pad=0.5)
-                # self.__draw_figure(fig)
+                self.__draw_figure(fig, screen)
 
-    def __update_play(self, P1_act, P2_act):
+    def __update_play(self, P1_act, P2_act, screen):
         # Move to next state
         if self.status != "Trans":
             action = [P1_act, P2_act]
@@ -362,28 +350,20 @@ class Game:
         self.scene, self.reward, self.done, _, _ = self.env.step(action)   
 
         ### Begin: Draw infomations ###
-        self.__draw_background()
+        self.__draw_background(screen)
 
         if self.is_player1_win == 1 and not(self.status == "Trans" and self.counter > 10):
-            self.__draw_P1_win_text()
+            self.__draw_P1_win_text(screen)
 
         if self.is_player2_win == 1 and not(self.status == "Trans" and self.counter > 10):
-            self.__draw_P2_win_text()
+            self.__draw_P2_win_text(screen)
 
-        self.__draw_player()
+        self.__draw_player(screen)
 
-        self.__draw_Trans() # Draw after everything is drawn
+        self.__draw_control(True, P1_act, True, P2_act, screen)
+
+        self.__draw_Trans(screen) # Draw after everything is drawn
         ### End: Draw infomations ###
-
-        # Update the window
-        pygame.display.flip()
-        time.sleep(1.0 / self.fps)
-
-        # If the window was closed, end the game
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
         
         # Go to next status
         self.counter += 1
@@ -557,7 +537,7 @@ class Game:
             self.is_player1_win, self.is_player2_win = 0, 0
         return state
 
-    def update(self, P1_act, P2_act) -> tuple[int, list]:
+    def update(self, P1_act, P2_act, screen) -> tuple[int, list]:
         """
         This function will return `reward, next_state, done`.
         """
@@ -565,10 +545,10 @@ class Game:
         self.__update_expected_landing_point_x(self.env.engine.ball)
 
         if self.mode == "Train":
-            self.__update_train(P1_act, P2_act)
+            self.__update_train(P1_act, P2_act, screen)
 
         elif self.mode == "Play":
-            self.__update_play(P1_act, P2_act)
+            self.__update_play(P1_act, P2_act, screen)
 
         # Add small rewards
         reward = self.reward + self.__get_reward_by_user_input(P2_act)

@@ -20,13 +20,16 @@ INPUT_DIM = 17
 OUTPUT_DIM = 18 
 
 # number of actor
-ACT_NUM = 4
+ACT_NUM = 3
+
+# number of actors in a row
+WID_NUM = 1
 
 # PATH of actors
 PATH = [f'./model/D3QN_SMIV_A{i}.pth' for i in range(ACT_NUM)]
 
 # Opponent
-Opponent = "Attacker"
+Opponent = "Old_AI"
 P1 = Player(Opponent, False)
 
 # The decease rate of reward
@@ -56,6 +59,9 @@ LEARN_RATE = 0.01
 
 # Counter of exprience
 exp_cnt = 0
+
+# Resolution ratio of screen
+RESOLUTION_RATIO = 1
 
 # The device we used (either CPU or GPU)
 if torch.cuda.is_available():
@@ -310,7 +316,7 @@ def learner(replay_buffer: PER, q_network, target_network, optimizer: torch.opti
 
     return loss.cpu().detach().numpy()
 
-def actor(replay_buffer: PER, game: Game, q_network, target_network):
+def actor(replay_buffer: PER, game: Game, q_network, target_network, screen):
     global exp_cnt, epsilon
     state = game.reset(True)
     # Convert state to tensor
@@ -333,7 +339,7 @@ def actor(replay_buffer: PER, game: Game, q_network, target_network):
         game.epsilon = epsilon
 
         # Take the action and observe the next state, reward, and done flag
-        reward, next_state, done = game.update(P1.get_act(game.env), action)
+        reward, next_state, done = game.update(P1.get_act(game.env), action, screen)
         total_reward += reward
 
         # Change state, next_state to tensor
@@ -354,11 +360,11 @@ def actor(replay_buffer: PER, game: Game, q_network, target_network):
         # Gain one more exp
         exp_cnt += 1
 
-def call_actor(replay_buffer: PER, game: Game, q_network, target_network, path, update_model_period):
+def call_actor(replay_buffer: PER, game: Game, q_network, target_network, path, update_model_period, screen):
     cnt = 0
     while True:
         cnt += 1
-        actor(replay_buffer, game, q_network, target_network)
+        actor(replay_buffer, game, q_network, target_network, screen)
         if cnt % update_model_period == 0:
             torch.save(q_network, path)
         
@@ -407,22 +413,41 @@ def train():
     #######################
 
     ## Initialize Memory ##
-    Pikachu = [Game("Train", "Attacker", "D3QN") for i in range(ACT_NUM)]
+    Pikachu = [Game("Train", "Attacker", "D3QN", RESOLUTION_RATIO, i % WID_NUM, i // WID_NUM) for i in range(ACT_NUM)]
     #######################
 
     ## Parallel Computing learner and actor ##
     print("Start training")
+
+    # Init pygame screen
+    WIDTH = 1060 * RESOLUTION_RATIO
+    HEIGHT = 304 * RESOLUTION_RATIO
+    HEI_NUM = np.ceil(ACT_NUM / WID_NUM)
+    screen = pygame.display.set_mode((WIDTH * WID_NUM + (WID_NUM + 1) * 30, HEIGHT * HEI_NUM + (HEI_NUM + 1) * 30))
+    pygame.display.set_caption('Pikachu_Volleyball')
     
+    ACTOR = []
+    # Create multiple actors and start discovering
     for i in range(ACT_NUM):
-        # Create multi thread
-        ACTOR = threading.Thread(target = call_actor, args = (memory, Pikachu[i], q_network[i], target_network, PATH[i], 10))
-        # Start training
-        ACTOR.start()
+        ACTOR += [threading.Thread(target = call_actor, args = (memory, Pikachu[i], q_network[i], target_network, PATH[i], 10, screen))]
+        ACTOR[i].start()
+
     
     cnt = 0
     history_winrt = np.ndarray((0, ACT_NUM))
+    history_loss = np.ndarray((0, ACT_NUM))
     while True:
         loss = []
+
+        # Update the window
+        pygame.display.flip()
+        time.sleep(1.0 / 120)
+        
+        # If the window was closed, end the game
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
 
         # If experience is not enough, don't learn
         if exp_cnt < MINI_BATCH_LEN:
@@ -441,13 +466,15 @@ def train():
         cnt += 1
         
         history_winrt = np.append(history_winrt, np.array([[Pikachu[i].prewinrt for i in range(ACT_NUM)]]), axis=0)
+        history_loss = np.append(history_loss, np.array([loss]), axis=0)
         np.save("history_winrt.npy", history_winrt)
+        np.save("history_loss.npy", history_loss)
 
         os.system('cls')
         print(f'epoch = {cnt}')
         print('=============================================================')
         for i in range(ACT_NUM):
-            print(f'Network{i} loss: {loss[i]:.4f} / pre win rate: {Pikachu[i].prewinrt:.4f} / avg win rate {Pikachu[i].avgwinrt:.4f}')
+            print(f'Network{i} loss: {loss[i]:.4f} / pre win rate: {Pikachu[i].prewinrt:.4f} / round: {Pikachu[i].tot}')
             if i != ACT_NUM - 1: print('=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=')      
         print('=============================================================')  
     

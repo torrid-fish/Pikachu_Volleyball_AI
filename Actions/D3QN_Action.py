@@ -38,20 +38,15 @@ class Dueling_D3QN(nn.Module):
 
         self.f1 = nn.Linear(17, 512)
 
-        self.val_hidden_1 = nn.Linear(512, 256)
-        self.adv_hidden_1 = nn.Linear(512, 256)
-
-        self.val_hidden_2 = nn.Linear(256, 256)
-        self.adv_hidden_2 = nn.Linear(256, 256)
+        self.val_hidden = nn.Linear(512, 256)
+        self.adv_hidden = nn.Linear(512, 256)
 
         self.val = nn.Linear(256, 1) # State value
         self.adv = nn.Linear(256, action_dim) # Advantage value
 
-        torch.nn.init.normal_(self.val_hidden_1.weight, 0, 0.02)
-        torch.nn.init.normal_(self.val_hidden_2.weight, 0, 0.02)
+        torch.nn.init.normal_(self.val_hidden.weight, 0, 0.02)
         torch.nn.init.normal_(self.val.weight, 0, 0.02)
-        torch.nn.init.normal_(self.adv_hidden_1.weight, 0, 0.02)
-        torch.nn.init.normal_(self.adv_hidden_2.weight, 0, 0.02)
+        torch.nn.init.normal_(self.adv_hidden.weight, 0, 0.02)
         torch.nn.init.normal_(self.adv.weight, 0, 0.02)
 
     def forward(self, x):
@@ -60,16 +55,10 @@ class Dueling_D3QN(nn.Module):
         x = self.f1(x)
         x = F.relu(x)
 
-        val_hidden = self.val_hidden_1(x)
+        val_hidden = self.val_hidden(x)
         val_hidden = F.relu(val_hidden)
 
-        adv_hidden = self.adv_hidden_1(x)
-        adv_hidden = F.relu(adv_hidden)
-
-        val_hidden = self.val_hidden_2(val_hidden)
-        val_hidden = F.relu(val_hidden)
-
-        adv_hidden = self.adv_hidden_2(val_hidden)
+        adv_hidden = self.adv_hidden(x)
         adv_hidden = F.relu(adv_hidden)
 
         val = self.val(val_hidden)

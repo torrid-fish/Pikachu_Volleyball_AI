@@ -16,7 +16,7 @@ class Player:
     ## function
     `get_act`: Retrieve the next movement. 
     """
-    def __init__(self, player: str = "Random", isPlayer2: bool = None):
+    def __init__(self, player: str = "Random", isPlayer2: bool = None, PATH: str = None):
         self.mode_list = ["Random", "Human", "apex_D3QN", "D3QN", "Old_AI", "Attacker"]
         if player not in self.mode_list:
             print(f'Error: {player} is an unknown player.')
@@ -25,9 +25,6 @@ class Player:
         self.isPlayer2 = isPlayer2
         
         if player == "D3QN":
-            # Load in previous variables
-            PATH = './model/D3QN_SMIV.pth' 
-                
             try:
                 self.model = torch.load(PATH)
                 print("Model loaded sucessfully.")
