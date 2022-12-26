@@ -20,23 +20,23 @@ INPUT_DIM = 17
 OUTPUT_DIM = 18 
 
 # number of actor
-ACT_NUM = 3
+ACT_NUM = 4
 
 # number of actors in a row
-WID_NUM = 1
+WID_NUM = 2
 
 # PATH of actors
 PATH = [f'./model/D3QN_SMIV_A{i}.pth' for i in range(ACT_NUM)]
 
 # Opponent
-Opponent = "Old_AI"
+Opponent = "Attacker"
 P1 = Player(Opponent, False)
 
 # The decease rate of reward
 GAMMA = 0.99
 
 # The size of batch we used in learner
-MINI_BATCH_LEN = 64
+MINI_BATCH_LEN = 128
 
 # The size of our memory
 REPLAY_MEMORY = 4096
@@ -61,7 +61,13 @@ LEARN_RATE = 0.01
 exp_cnt = 0
 
 # Resolution ratio of screen
-RESOLUTION_RATIO = 1
+RESOLUTION_RATIO = 0.5
+
+# Whether train with multi-threading mode
+MULTI_THEARDING = False
+
+# How often we store q_network
+UPDATE_Q_NETWORK_PERIOD = 10
 
 # The device we used (either CPU or GPU)
 if torch.cuda.is_available():
@@ -316,56 +322,60 @@ def learner(replay_buffer: PER, q_network, target_network, optimizer: torch.opti
 
     return loss.cpu().detach().numpy()
 
-def actor(replay_buffer: PER, game: Game, q_network, target_network, screen):
+def actor(replay_buffer: PER, game: Game, q_network, target_network, screen, state):
     global exp_cnt, epsilon
-    state = game.reset(True)
-    # Convert state to tensor
+
+    # Select an action using an epsilon-greedy policy
+    if np.random.rand() < epsilon:
+        action = np.random.randint(OUTPUT_DIM)
+        game.is_random = True
+    else:
+        action = q_network(state).argmax()
+        game.is_random = False
+
+    # Update epsilon
+    epsilon -= (BEGIN_EPSILON - FINAL_EPSILON) / EXPLORE
+    epsilon = max(epsilon, FINAL_EPSILON)
+    game.epsilon = epsilon
+
+    # Take the action and observe the next state, reward, and done flag
+    reward, next_state, done = game.update(P1.get_act(game.env), action, screen)
+
+    # Change state, next_state to tensor
     state = state.reshape(1, INPUT_DIM)
-    state = torch.FloatTensor(state).to(device)
-    done = False
-    total_reward = 0
-    while not done:
-        # Select an action using an epsilon-greedy policy
-        if np.random.rand() < epsilon:
-            action = np.random.randint(OUTPUT_DIM)
-            game.is_random = True
-        else:
-            action = q_network(state).argmax()
-            game.is_random = False
+    state = state.clone().detach() # MUST ON DEVICE
+    next_state = next_state.reshape(1, INPUT_DIM)
+    next_state = torch.FloatTensor(next_state).to(device)
 
-        # Update epsilon
-        epsilon -= (BEGIN_EPSILON - FINAL_EPSILON) / EXPLORE
-        epsilon = max(epsilon, FINAL_EPSILON)
-        game.epsilon = epsilon
+    # Compute the TD error
+    td_error = compute_td_error(state, action, reward, next_state, done, q_network, target_network)
 
-        # Take the action and observe the next state, reward, and done flag
-        reward, next_state, done = game.update(P1.get_act(game.env), action, screen)
-        total_reward += reward
+    # Store the transition in the replay buffer with the TD error as a weight
+    replay_buffer.add(td_error, (state, action, reward, next_state, done))
 
-        # Change state, next_state to tensor
-        state = state.reshape(1, INPUT_DIM)
-        state = state.clone().detach() # MUST ON DEVICE
-        next_state = next_state.reshape(1, INPUT_DIM)
-        next_state = torch.FloatTensor(next_state).to(device)
+    # Gain one more exp
+    exp_cnt += 1
 
-        # Compute the TD error
-        td_error = compute_td_error(state, action, reward, next_state, done, q_network, target_network)
+    # Update done and state
+    return done, next_state
 
-        # Store the transition in the replay buffer with the TD error as a weight
-        replay_buffer.add(td_error, (state, action, reward, next_state, done))
-
-        # Update the state and continue the loop
-        state = next_state
-
-        # Gain one more exp
-        exp_cnt += 1
-
-def call_actor(replay_buffer: PER, game: Game, q_network, target_network, path, update_model_period, screen):
+def call_actor(replay_buffer: PER, game: Game, q_network, target_network, path, screen):
     cnt = 0
     while True:
         cnt += 1
-        actor(replay_buffer, game, q_network, target_network, screen)
-        if cnt % update_model_period == 0:
+        # Get init state
+        state = game.reset(True)
+        # Convert state to tensor
+        state = state.reshape(1, INPUT_DIM)
+        state = torch.FloatTensor(state).to(device)
+        done = False
+        # Complete one round
+        while not done:
+            # Update done and state
+            done, state = actor(replay_buffer, game, q_network, target_network, screen, state)
+
+        # Save model for enough rounds
+        if cnt % UPDATE_Q_NETWORK_PERIOD == 0:
             torch.save(q_network, path)
         
 #################################
@@ -413,69 +423,142 @@ def train():
     #######################
 
     ## Initialize Memory ##
-    Pikachu = [Game("Train", "Attacker", "D3QN", RESOLUTION_RATIO, i % WID_NUM, i // WID_NUM) for i in range(ACT_NUM)]
+    Pikachu = [Game("Train", Opponent, "D3QN", RESOLUTION_RATIO, i % WID_NUM, i // WID_NUM) for i in range(ACT_NUM)]
     #######################
 
     ## Parallel Computing learner and actor ##
-    print("Start training")
-
     # Init pygame screen
     WIDTH = 1060 * RESOLUTION_RATIO
     HEIGHT = 304 * RESOLUTION_RATIO
     HEI_NUM = np.ceil(ACT_NUM / WID_NUM)
     screen = pygame.display.set_mode((WIDTH * WID_NUM + (WID_NUM + 1) * 30, HEIGHT * HEI_NUM + (HEI_NUM + 1) * 30))
     pygame.display.set_caption('Pikachu_Volleyball')
-    
-    ACTOR = []
-    # Create multiple actors and start discovering
-    for i in range(ACT_NUM):
-        ACTOR += [threading.Thread(target = call_actor, args = (memory, Pikachu[i], q_network[i], target_network, PATH[i], 10, screen))]
-        ACTOR[i].start()
 
-    
-    cnt = 0
-    history_winrt = np.ndarray((0, ACT_NUM))
-    history_loss = np.ndarray((0, ACT_NUM))
-    while True:
-        loss = []
+    if MULTI_THEARDING:
+        # Use Multi-threading to execute
+        ACTOR = []
+        # Create multiple actors and start discovering
+        for i in range(ACT_NUM):
+            ACTOR += [threading.Thread(target = call_actor, args = (memory, Pikachu[i], q_network[i], target_network, PATH[i], screen))]
+            ACTOR[i].start()
 
-        # Update the window
-        pygame.display.flip()
-        time.sleep(1.0 / 120)
-        
-        # If the window was closed, end the game
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
+        cnt = 0
+        history_winrt = np.ndarray((0, ACT_NUM))
+        history_loss = np.ndarray((0, ACT_NUM))
 
-        # If experience is not enough, don't learn
-        if exp_cnt < MINI_BATCH_LEN:
+        while True:
+            loss = []
+
+            # Update the window
+            pygame.display.flip()
+            
+            # If the window was closed, end the game
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+
+            # If experience is not enough, don't learn
+            if exp_cnt < MINI_BATCH_LEN:
+                os.system('cls')
+                print('Collecting Data ', end='')
+                for i in range(exp_cnt % 3 + 1): print('.', end='')
+                print('')
+                continue
+
+            # Learning for each network
+            for i in range(ACT_NUM):
+                loss += [learner(memory, q_network[i], target_network, optimizer[i])]
+            
+            if cnt % 10 == 0:
+                target_network = q_network[loss.index(min(loss))]
+
+            cnt += 1
+            
+            history_winrt = np.append(history_winrt, np.array([[Pikachu[i].prewinrt for i in range(ACT_NUM)]]), axis=0)
+            history_loss = np.append(history_loss, np.array([loss]), axis=0)
+            np.save("history_winrt.npy", history_winrt)
+            np.save("history_loss.npy", history_loss)
+
             os.system('cls')
-            print('Collecting Data ', end='')
-            for i in range(exp_cnt % 3 + 1): print('.', end='')
-            print('')
-            continue
+            print(f'epoch = {cnt}')
+            print('=============================================================')
+            for i in range(ACT_NUM):
+                print(f'Network{i} loss: {loss[i]:.4f} / pre win rate: {Pikachu[i].prewinrt:.4f} / round: {Pikachu[i].tot}')
+                if i != ACT_NUM - 1: print('=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=')      
+            print('=============================================================')  
+    else:
+        # Only use sigle thread to train
+        cnt = 0
+        history_winrt = np.ndarray((0, ACT_NUM))
+        history_loss = np.ndarray((0, ACT_NUM))
 
+        # Initialize dones and states
+        dones, states = [], []
         for i in range(ACT_NUM):
-            loss += [learner(memory, q_network[i], target_network, optimizer[i])]
-        
-        if cnt % 10 == 0:
-            target_network = q_network[loss.index(min(loss))]
+            dones += [0]
+            state = Pikachu[i].reset(True)
+            # Convert state to tensor
+            state = state.reshape(1, INPUT_DIM)
+            state = torch.FloatTensor(state).to(device)
+            states += [state]
 
-        cnt += 1
-        
-        history_winrt = np.append(history_winrt, np.array([[Pikachu[i].prewinrt for i in range(ACT_NUM)]]), axis=0)
-        history_loss = np.append(history_loss, np.array([loss]), axis=0)
-        np.save("history_winrt.npy", history_winrt)
-        np.save("history_loss.npy", history_loss)
+        # Keep looping
+        while True:
+            loss = []
 
-        os.system('cls')
-        print(f'epoch = {cnt}')
-        print('=============================================================')
-        for i in range(ACT_NUM):
-            print(f'Network{i} loss: {loss[i]:.4f} / pre win rate: {Pikachu[i].prewinrt:.4f} / round: {Pikachu[i].tot}')
-            if i != ACT_NUM - 1: print('=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=')      
-        print('=============================================================')  
-    
+            # Each actor do one action
+            for i in range(ACT_NUM):
+                # Update dones and states
+                dones[i], states[i] = actor(memory, Pikachu[i], q_network[i], target_network, screen, states[i])  
+                # Reset game if done
+                if dones[i]:
+                    state = Pikachu[i].reset(True)
+                    state = state.reshape(1, INPUT_DIM)
+                    state = torch.FloatTensor(state).to(device)
+                    states[i] = state
+                    # Save model for enough rounds
+                    if Pikachu[i].tot % UPDATE_Q_NETWORK_PERIOD == 0:
+                        torch.save(q_network[i], PATH[i])           
+
+            # Update the window (We then make sure all infomation will be drew)
+            pygame.display.flip()
+            
+            # If the window was closed, end the game
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+
+            # If experience is not enough, don't learn
+            if exp_cnt < MINI_BATCH_LEN:
+                os.system('cls')
+                print('Collecting Data ', end='')
+                for i in range(exp_cnt % 3 + 1): print('.', end='')
+                print('')
+                continue
+
+            # Learning for each network
+            for i in range(ACT_NUM):
+                loss += [learner(memory, q_network[i], target_network, optimizer[i])]
+                Pikachu[i].loss = loss[i]
+            
+            if cnt % 10 == 0:
+                target_network = q_network[loss.index(min(loss))]
+
+            cnt += 1
+            
+            history_winrt = np.append(history_winrt, np.array([[Pikachu[i].prewinrt for i in range(ACT_NUM)]]), axis=0)
+            history_loss = np.append(history_loss, np.array([loss]), axis=0)
+            np.save("history_winrt.npy", history_winrt)
+            np.save("history_loss.npy", history_loss)
+
+            os.system('cls')
+            print(f'epoch = {cnt}')
+            print('=============================================================')
+            for i in range(ACT_NUM):
+                print(f'Network{i} loss: {loss[i]:.4f} / pre win rate: {Pikachu[i].prewinrt:.4f} / round: {Pikachu[i].tot}')
+                if i != ACT_NUM - 1: print('=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=')      
+            print('=============================================================')  
+
     ############################################
