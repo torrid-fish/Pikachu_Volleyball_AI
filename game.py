@@ -575,7 +575,7 @@ class Game:
             self.__update_play(P1_act, P2_act)
 
         # Add small rewards
-        reward = self.reward + self.__get_reward_by_user_input(P2_act)
+        self.reward = self.reward + self.__get_reward_by_user_input(P2_act)
         self.losses += [self.loss]
 
-        return reward, self.__cal_state(), self.done
+        return self.reward, self.__cal_state(), self.done
