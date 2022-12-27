@@ -6,6 +6,7 @@ from player import Player
 from game import Game
 from network import *
 import random
+import time
 
 # Choose CPU or GPU
 device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
@@ -21,7 +22,7 @@ OUTPUT_DIM = 18
 GAMMA = 0.8
 
 # Size of slice
-BATCH_SIZE = 1024
+BATCH_SIZE = 512
 
 # Number of times to update target network
 UPDATA_TAGESTEP = 10
@@ -33,7 +34,7 @@ REPLAY_MEMORY = 16384
 BEGIN_LEARN_SIZE = 2048
 
 # Learning rate
-LEARNING_RATE = 1e-7
+LEARNING_RATE = 1e-5
 
 # Begin value of epsilon
 BEGIN_EPSILON = 0.2
@@ -47,29 +48,39 @@ EXPLORE = 500000
 """
     Train function
 """
-def init(P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO):
+def init(P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO, DISPLAY):
     # Create one game and opponent
     P1 = Player(P1_MODE, False, P1_TAG)
-    Pikachu = Game("Train", P1_MODE, P2_MODE, RESOLUTION_RATIO)
+    Pikachu = Game("Train", P1_MODE, P2_MODE, RESOLUTION_RATIO, DISPLAY == 'PYGAME')
 
     try:
-        network = torch.load(P2_TAG)
-        target_network = torch.load(P2_TAG)
+        network = torch.load('./model/' + P2_TAG + '.pth')
+        target_network = torch.load('./model/' + P2_TAG + '.pth')
+        print('Load previous network successfully.')
+    except FileNotFoundError:
+        network = Dueling_D3QN(OUTPUT_DIM)
+        target_network = Dueling_D3QN(OUTPUT_DIM)
+        print('Can not find previoous network, create a new memory.')
+
+    try:
         memory = torch.load('./memory/' + P2_TAG + '.pth')
+        print('Load previous memory successfully.')
+    except FileNotFoundError:
+        memory = PER(REPLAY_MEMORY)
+        print('Can not find previoous memory, create a new memory.')
+
+    try:
         epsilon = torch.load('./log/' + P2_TAG + '.pth')['epsilon']
         pre_result = torch.load('./log/' + P2_TAG + '.pth')['pre_result']
         winrts = torch.load('./log/' + P2_TAG + '.pth')['winrts']
         losses = torch.load('./log/' + P2_TAG + '.pth')['losses']
-        print('Load previous data successfully.')
+        print('Load previous log successfully.')
     except FileNotFoundError:
-        network = Dueling_D3QN(OUTPUT_DIM)
-        target_network = Dueling_D3QN(OUTPUT_DIM)
         pre_result = []
-        memory = PER(REPLAY_MEMORY)
         epsilon = BEGIN_EPSILON
         winrts = []
         losses = []
-        print('Create new model successfully.')
+        print('Can not find previoous log, create a new log.')
 
     # Update Game value
     Pikachu.epsilon = epsilon
@@ -90,7 +101,7 @@ def init(P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO):
     # Gradiant Optimizer ADAM
     optimizer = torch.optim.Adam(network.parameters(), lr=LEARNING_RATE)
 
-    return network, target_network, P1, Pikachu, optimizer, memory, epsilon, winrts, losses
+    return network, target_network, P1, Pikachu, optimizer, memory, epsilon, losses
 
 def actor(network, target_network, P1, Pikachu, memory: PER, state, epsilon):
     p = random.random()
@@ -189,41 +200,10 @@ def learner(memory: PER, network, target_network, Pikachu, optimizer, losses):
     loss.backward()
     optimizer.step() 
 
-def train(P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO):
-    # Initialize Train Process
-    network, target_network, P1, Pikachu, optimizer, memory, epsilon, winrts, losses = init(P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO)
-    
-    for round in count():
-        # Reset environment
-        state = Pikachu.reset(True)
+def print_info(Pikachu: Game, loss):
+    print(f'== ROUND {Pikachu.tot} ==')
+    curtime = time.gmtime(time.perf_counter() - Pikachu.beg_time)
+    print(f'- Time: {curtime.tm_hour:02d}:{curtime.tm_min:02d}:{curtime.tm_sec:02d}')
+    print(f'- Win Rate: {Pikachu.prewinrt:.2f}')
+    print(f'- Loss: {loss:.6f}\n')
 
-        learn_step = 0
-        # Keep learning until gain reward
-        while True:
-            # Actor gain one experience and update state
-            state, epsilon = actor(network, target_network, P1, Pikachu, memory, state, epsilon)
-
-            # If experience is enough, start learning
-            if memory.size() >= BEGIN_LEARN_SIZE:
-                # Learner learn one BATCH_SIZE experience and update network
-                learner(memory, network, target_network, Pikachu, optimizer, losses)
-            
-                # Update target network
-                if learn_step % UPDATA_TAGESTEP == 0:
-                    target_network.load_state_dict(network.state_dict())
-
-                # Learner learn once
-                learn_step += 1
-            
-            # Keep learning until one game is set, we go to next round.
-            if Pikachu.done:
-                winrts += [Pikachu.prewinrt]
-                torch.cuda.empty_cache()
-                break
-
-        # With enough game round, we save trained model.
-        if round % UPDATA_TAGESTEP == 0 and round != 0 and memory.size() >= BEGIN_LEARN_SIZE:
-            print("Data saved!")
-            torch.save(network, './model/' + P2_TAG + '.pth')
-            torch.save(memory, './memory/' + P2_TAG + '.pth')
-            torch.save({'losses': losses, 'winrts': winrts, 'epsilon': epsilon, 'pre_result': Pikachu.pre_result}, './log/' + P2_TAG + '.pth')

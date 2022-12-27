@@ -9,9 +9,8 @@ from gym_pikachu_volleyball.envs.common import *
 from gym_pikachu_volleyball.envs import PikachuVolleyballMultiEnv
 from gym_pikachu_volleyball.envs.constants import *
 from gym_pikachu_volleyball.envs.engine import Ball
-from Actions.Old_AI_Action import INFINITE_LOOP_LIMIT, expectedLandingPointXWhenPowerHit
-import random
-
+from Actions.Old_AI_Action import INFINITE_LOOP_LIMIT
+from reward import calculate_reward
 
 class Game:
     """
@@ -38,9 +37,9 @@ class Game:
     ### Test
     Currently for test mode, nothing special will be shown.
     """
-    def __init__(self, mode: str, P1_mode: str, P2_mode: str, resolution_ratio: float):
+    def __init__(self, mode: str, P1_mode: str, P2_mode: str, resolution_ratio: float, display: bool):
         # Sanity check
-        self.mode_list = ["Train", "Play"]
+        self.mode_list = ["Train", "Play", "Validate"]
         if mode not in self.mode_list:
             print(f'Error: {mode} is an unknown mode.')
             sys.exit()
@@ -75,18 +74,24 @@ class Game:
         # The secene of the back ground
         self.scene = self.env.reset(return_info=True, options={'is_player2_serve': True})
 
-        # Initialize pygame
-        pygame.init()
-        if mode == "Play":
-            self.resolution_ratio = resolution_ratio # The screen is twice larger
-            self.sx, self.sy = 0, 0
-            self.screen = pygame.display.set_mode((self.resolution_ratio * 432, self.resolution_ratio * 304))
-        else:
-            self.resolution_ratio = resolution_ratio
-            self.sx, self.sy = 30, 30
-            self.screen = pygame.display.set_mode((1120 * self.resolution_ratio, 304 * self.resolution_ratio + 2 * 30))
+        self.display = display
+        if display:
+            # Initialize pygame
+            pygame.init()
+            if mode == "Play":
+                self.resolution_ratio = resolution_ratio # The screen is twice larger
+                self.sx, self.sy = 0, 0
+                self.screen = pygame.display.set_mode((self.resolution_ratio * 432, self.resolution_ratio * 304))
+            elif mode == "Train":
+                self.resolution_ratio = resolution_ratio
+                self.sx, self.sy = 30, 30
+                self.screen = pygame.display.set_mode((1120 * self.resolution_ratio, 304 * self.resolution_ratio + 2 * 30))
+            elif mode == "Validate":
+                self.resolution_ratio = resolution_ratio
+                self.sx, self.sy = 0, 0
+                self.screen = pygame.display.set_mode((self.resolution_ratio * 432, self.resolution_ratio * 304))
 
-        pygame.display.set_caption("Pikachu Volleyball")
+            pygame.display.set_caption("Pikachu Volleyball")
  
     ## Private member ##
 
@@ -179,7 +184,7 @@ class Game:
         f'Speed(round/s): {self.tot / (time.perf_counter() - self.beg_time):.2f}', 
         f'Speed(frm/s): {1 / (time.perf_counter() - self.last_time):.2f}',
         f'== P2 info ==',
-        f'pre win rate: {self.prewinrt:.2f}',
+        f'win rate: {self.prewinrt:.2f}',
         f'== Train info ==',
         f'round: {self.tot}',
         f'time: {curtime.tm_hour:02d}:{curtime.tm_min:02d}:{curtime.tm_sec:02d}',
@@ -300,27 +305,29 @@ class Game:
         self.scene, self.reward, self.done, _, _ = self.env.step(action)   
 
         ### Begin: Draw infomations ###
-        self.__draw_background()
+        if self.display:
+            self.__draw_background()
 
-        self.__draw_player()
+            self.__draw_player()
 
-        self.__draw_info()
+            self.__draw_info()
 
-        self.__draw_lose_pt()
+            self.__draw_lose_pt()
 
-        self.__draw_fall_pt()
+            self.__draw_fall_pt()
 
-        self.__draw_control(True, P1_act, True, P2_act)
+            self.__draw_control(True, P1_act, True, P2_act)
         ### End: Draw infomations ###
 
         # Update the window
-        pygame.display.flip()
+        if self.display:
+            pygame.display.flip()
 
-        # If the window was closed, end the game
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
+            # If the window was closed, end the game
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
         
         # Go to next status
         self.counter += 1
@@ -332,21 +339,22 @@ class Game:
                 self.__update_winrt()
                 self.tot += 1
                 self.lose_pt += [self.env.engine.ball.x]
-                # Draw plot
-                fig = Figure()
-                # Plot P2 win rate
-                ax1 = fig.add_subplot(2, 1, 1)
-                ax1.plot(self.winrts)
-                ax1.set_ylim(0, 1.1)
-                ax1.set_title('P2 Win rate')
-                ax1.set_xlabel('Round')
-                ax2 = fig.add_subplot(2, 1, 2)
-                ax2.plot(self.losses)
-                ax2.set_title('Loss')
-                ax2.set_xlabel('Frame')
-                # Set padding
-                fig.tight_layout(pad=0.5)
-                self.__draw_figure(fig)
+                if self.display:
+                    # Draw plot
+                    fig = Figure()
+                    # Plot P2 win rate
+                    ax1 = fig.add_subplot(2, 1, 1)
+                    ax1.plot(self.winrts)
+                    ax1.set_ylim(0, 1.1)
+                    ax1.set_title('P2 Win rate')
+                    ax1.set_xlabel('Round')
+                    ax2 = fig.add_subplot(2, 1, 2)
+                    ax2.plot(self.losses)
+                    ax2.set_title('Loss')
+                    ax2.set_xlabel('Frame')
+                    # Set padding
+                    fig.tight_layout(pad=0.5)
+                    self.__draw_figure(fig)
 
     def __update_play(self, P1_act, P2_act):
         # Move to next state
@@ -405,74 +413,42 @@ class Game:
                 self.fps = self.peak_fps
                 self.counter = 0
 
-    def __get_reward_depends_on_power_hit(self, P2_act):
-        player, ball, theOtherPlayer, userInput = self.env.engine.players[1], self.env.engine.ball, self.env.engine.players[0], convert_to_user_input(P2_act, 1)
-        y_dirs = [0, -1, 1] if random.randrange(2) else [1, 0, -1]
-        reward = 0
-        should_power_hit = False
-        for xDirection in [1, 0]:
-            for yDirection in y_dirs:
-                expected_landing_point_x = expectedLandingPointXWhenPowerHit(xDirection, yDirection, ball)
-                if (expected_landing_point_x <= int(player.is_player2) * GROUND_HALF_WIDTH or\
-                    expected_landing_point_x >= int(player.is_player2) * GROUND_WIDTH + GROUND_HALF_WIDTH) and\
-                    abs(expected_landing_point_x - theOtherPlayer.x) > PLAYER_LENGTH:
-                        reward += int(userInput.x_direction == xDirection) +\
-                                  int(userInput.y_direction == yDirection) +\
-                                  int(userInput.power_hit == True)
-                        should_power_hit = True
-                elif (expected_landing_point_x > int(player.is_player2) * GROUND_HALF_WIDTH or\
-                    expected_landing_point_x < int(player.is_player2) * GROUND_WIDTH + GROUND_HALF_WIDTH) and\
-                    yDirection == 1:
-                        reward -= (
-                            int(userInput.x_direction == xDirection) +\
-                            int(userInput.y_direction == yDirection) +\
-                            int(userInput.power_hit == True)
-                        ) * 5
-        reward += int(userInput.power_hit == False)
-        return reward / 100, should_power_hit
+    def __update_validate(self, P1_act, P2_act):
+        # Move to next state
+        action = [P1_act, P2_act]
+        self.scene, self.reward, self.done, _, _ = self.env.step(action)   
 
-    def __get_reward_by_user_input(self, P2_act):
-        player, ball, theOtherPlayer, userInput = self.env.engine.players[1], self.env.engine.ball, self.env.engine.players[0], convert_to_user_input(P2_act, 1)
-        reward = 0 
-        virtualexpected_landing_point_x: int = ball.expected_landing_point_x
+        ### Begin: Draw infomations ###
+        self.__draw_background()
 
-        if abs(ball.x - player.x) > 100 and abs(ball.x_velocity) < 7:
-            leftBoundary: int = int(player.is_player2) * GROUND_HALF_WIDTH
-            if (ball.expected_landing_point_x <= leftBoundary or\
-            ball.expected_landing_point_x >= int(player.is_player2) * GROUND_WIDTH + GROUND_HALF_WIDTH) and\
-            player.computer_where_to_stand_by == 0:
-                virtualexpected_landing_point_x = leftBoundary + GROUND_HALF_WIDTH // 2
+        self.__draw_player()
 
-        if abs(virtualexpected_landing_point_x - player.x) > 10:
-            reward += int(userInput.x_direction == (1 if player.x < virtualexpected_landing_point_x else -1))
-            
-        if player.y > 180 and not userInput.power_hit:
-            if abs(ball.x_velocity) < 5 and\
-            abs(ball.x - player.x) < PLAYER_HALF_LENGTH and\
-            ball.y > -36 and ball.y < 104 and ball.y_velocity > 0:
-                reward += int(userInput.y_direction == -1)
-            
-            leftBoundary: int = int(player.is_player2) * GROUND_HALF_WIDTH
-            rightBoundary: int = (int(player.is_player2) + 1) * GROUND_HALF_WIDTH
-            
-            if ball.expected_landing_point_x > leftBoundary and ball.expected_landing_point_x < rightBoundary and\
-            abs(ball.x - player.x) > 10 + PLAYER_LENGTH and\
-            ball.x > leftBoundary and ball.x < rightBoundary and ball.y > 174:
-                reward += int(userInput.power_hit == 1)
-                reward += int(userInput.x_direction == (1 if player.x < ball.x else -1))
+        self.__draw_lose_pt()
 
-        elif player.state == 1 or player.state == 2:
-            if abs(ball.x - player.x) > 8:
-                reward += int(userInput.x_direction == (1 if player.x < ball.x else -1))
+        self.__draw_fall_pt()
 
-            if abs(ball.x - player.x) < 48 and abs(ball.y - player.y) < 48:
-                temp_reward, shouldInputPowerHit = self.__get_reward_depends_on_power_hit(P2_act)
-                reward += temp_reward
-                if shouldInputPowerHit:
-                    reward += int(userInput.power_hit == 1)
-                    if abs(theOtherPlayer.x - player.x) < 80 and userInput.y_direction != -1:
-                        reward += int(userInput.y_direction == -1)
-        return reward / 100
+        self.__draw_control(True, P1_act, True, P2_act)
+        ### End: Draw infomations ###
+
+        # Update the window
+        pygame.display.flip()
+
+        # If the window was closed, end the game
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+        
+        # Go to next status
+        self.counter += 1
+        if self.status == "Play":
+            self.counter = 0
+            self.is_player1_win |= self.reward == -1
+            self.is_player2_win |= self.reward == 1
+            if self.done:
+                self.__update_winrt()
+                self.tot += 1
+                self.lose_pt += [self.env.engine.ball.x]                
 
     def __update_expected_landing_point_x(self, ball: Ball):
         """
@@ -574,9 +550,12 @@ class Game:
 
         elif self.mode == "Play":
             self.__update_play(P1_act, P2_act)
+        
+        elif self.mode == "Validate":
+            self.__update_validate(P1_act, P2_act)
 
         # Add small rewards
-        self.adjusted_reward = self.reward + self.__get_reward_by_user_input(P2_act)
+        self.adjusted_reward = calculate_reward(self.done, self.is_player2_win, P2_act, self.env)
         self.losses += [self.loss]
 
         return self.adjusted_reward, self.__cal_state(), self.done

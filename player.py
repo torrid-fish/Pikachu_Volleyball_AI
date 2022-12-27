@@ -26,8 +26,9 @@ class Player:
         
         if player == "D3QN":
             # Try to load stored model.
+            print(PATH)
             try:
-                self.model = torch.load(PATH)
+                self.model = torch.load('./model/' + PATH + '.pth')
                 print("Model loaded sucessfully.")
             except FileNotFoundError:
                 self.model = Dueling_D3QN(18)

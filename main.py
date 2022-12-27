@@ -1,22 +1,46 @@
-from game import Game
-from player import Player
-from train import train
-import torch
+from script import play, train, validate
 import os
-import sys
+import torch
+import time
+
+"""
+You can setting you default mode here.
+"""
+DEFAULT_PATTERN = ("Train", "Old_AI", "D3QN", "None", "None", 1.3, "PYGAME")
 
 def interactive_initialization():
+    game_mode = {'1': 'Play', '2': 'Train', '3': 'Validate'}
+    player_mode = {'1': 'Human', '2': 'Old_AI', '3': 'D3QN', '4': 'Attacker'}
+    display_mode = {'1': 'PYGAME', '2': 'COMMANDLINE'}
+    screen_mode = {'1': 1.3, '2': 0.8}
+
+    if torch.cuda.is_available():
+        print('Looks like you can use GPU to speed up! Congrats.')
+    else:
+        print('Looks like you can only use CPU... Does anything go wrong?')
+    time.sleep(2)    
+
     os.system('cls')
-    print('Would you like to use this training pattern: "P1 = Old_AI, P2 = D3QN"? (y / n)')
-    SHORTCUT = input()
-    if SHORTCUT == 'n':
-        print('Alright, what mode do you want: (1: Play / 2: Train)')
-        MODE = input()
-        if MODE == '1': MODE = 'Play'
-        if MODE == '2': MODE = 'Train'
+    # Load default pattern
+    MODE, P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO, DISPLAY = DEFAULT_PATTERN
+    print(f'Would you like to use this default pattern?')
+    print(f'- MODE: {MODE}\n- P1_MODE: {P1_MODE}\n- P2_MODE: {P2_MODE}\n- P1_TAG: {P1_TAG}\n- P2_TAG: ____\n- RESOLUTION_RATIO: {RESOLUTION_RATIO}\n- DISPLAY: {DISPLAY}\n')
+    print(f'- Network Structure:\n')
+    NETWORK = f'\
+    (1, 17) ⇒ (17, 1024) ⇒ (1024, 512) ⇒ (512, 256) ⇒ (512, 1)   ⇒ (1, 16) \n\
+     INPUT      F1           F2        ⇘  HIDDEN_S     STATE    ⇗  OUTPUT    \n\
+                                         (512, 256) ⇒ (512, 16)              \n\
+                                          HIDDEN_A     ADVANTAGE               '
+    print(NETWORK)
+    print('\n(1: yes / 2: no)')
+    DEFAULT = input()
+
+    # Don't use default pattern.
+    if DEFAULT == '2':
+        print('Alright, what mode do you want: (1: Play / 2: Train / 3: Validate)')
+        MODE = game_mode[input()]
 
         # P1
-        player_mode = {'1': 'Human', '2': 'Old_AI', '3': 'D3QN', '4': 'Attacker'}
         print('Input P1 mode: (1: Human / 2: Old_AI / 3: D3QN / 4: Attacker)')
         P1_MODE = player_mode[input()]
 
@@ -26,56 +50,34 @@ def interactive_initialization():
             print(f'Okay, we will use the model stored at {P1_TAG}.')
         else:
             P1_TAG = 'None'
-        
-        # P2
+
         print('Input P2 mode: (1: Human / 2: Old_AI / 3: D3QN / 4: Attacker)')
         P2_MODE = player_mode[input()]
         
-        if P2_MODE == "D3QN":
-            print('Input the path to the model of P2: ./model/____.pth (only the underline part)')
-            P2_TAG = input()
-            print(f'Okay, the model of P1 will be stored at {P2_TAG}.')
-        else:
-            P2_TAG = 'None'
-    
-    elif SHORTCUT == 'y':
-        MODE, P1_MODE, P2_MODE, P1_TAG = 'Train', 'Old_AI', 'D3QN', 'None'    
-        print('Input the path to the model of P2: ./model/____.pth (only the underline part)')
-        P2_TAG = input()
-        print(f'Okay, the model of P1 will be stored at {P2_TAG}.') 
+    print('Input the path to the model of P2: ./model/____.pth (only the underline part)')
+    P2_TAG = input()
+    print(f'Okay, the model of P2 will be stored at {P2_TAG}.') 
 
-    if MODE == 'Train':
-        print('By the way, which screen size do you prefer? (1: Medium / 2: Small)')
-        SZ = input()
-        if SZ == '1':
-            RESOLUTION_RATIO = 1.3
-        elif SZ == '2':
-            RESOLUTION_RATIO = 0.8
-    
+    if MODE == 'Train' and DEFAULT == '2':
+        print('By the way, would you like to use pygame to display? (1: use pygame, 2: use command line)')
+        DISPLAY = display_mode[input()]
+        
+        if DISPLAY == 'PYGAME':
+            print('Okay, which screen size do you prefer? (1: Medium / 2: Small)')
+            RESOLUTION_RATIO = screen_mode[input()]
         
     # Return all infomations    
-    return MODE, P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO
-
-def play(P1_MODE, P2_MODE, P1_TAG, P2_TAG):
-    # Create players and game
-    P1 = Player(P1_MODE, False, P1_TAG)
-    P2 = Player(P2_MODE, True, P2_TAG)
-    Pikachu = Game("Play", P1_MODE, P2_MODE, 2)
-
-    # Get initial state
-    state = Pikachu.reset(True)
-
-    # Keep update the scene
-    while True:
-        reward, state, done = Pikachu.update(P1.get_act(Pikachu.env, state), P2.get_act(Pikachu.env, state))
+    return MODE, P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO, DISPLAY
 
 if __name__ == '__main__':
     # Initialization
-    MODE, P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO = interactive_initialization()
-
+    MODE, P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO, DISPLAY = interactive_initialization()
 
     if MODE == "Play":
         play(P1_MODE, P2_MODE, P1_TAG, P2_TAG)
     
     elif MODE == "Train":
-        train(P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO)
+        train(P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO, DISPLAY)
+
+    elif MODE == "Validate":
+        validate(P1_MODE, P2_MODE, P1_TAG, P2_TAG)
