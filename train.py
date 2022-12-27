@@ -145,7 +145,7 @@ def actor(network, target_network, P1, Pikachu, memory: PER, state, epsilon):
     Pikachu.epsilon = epsilon
 
     # Interact with environment
-    reward, next_state, done = Pikachu.update(P1.get_act(Pikachu.env), action)
+    reward, next_state, done = Pikachu.update(P1.get_act(Pikachu.env, state), action)
 
     # Turn next_state into tensor
     _state = state.reshape(1, INPUT_DIM)
@@ -234,6 +234,7 @@ def print_info(Pikachus, losses_list):
         curtime = time.gmtime(time.perf_counter() - Pikachu.beg_time)
         print(f'- Time: {curtime.tm_hour:02d}:{curtime.tm_min:02d}:{curtime.tm_sec:02d}')
         print(f'- Win Rate: {Pikachu.prewinrt:.2f}')
-        print(f'- Loss: {losses[-1]:.6f}\n')
+        print(f'- Loss: {losses[-1]:.6f}')
+        print(f'== Model {i} Data saved! ==\n')
         i += 1
 

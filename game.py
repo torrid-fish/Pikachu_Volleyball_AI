@@ -181,7 +181,6 @@ class Game:
         font = pygame.font.Font(None, int(20 * self.resolution_ratio))
 
         curtime = time.gmtime(time.perf_counter() - self.beg_time)
-        self.speed = 1 / (time.perf_counter() - self.last_time)
 
         message = [
         f'Speed(round/s): {self.tot / (time.perf_counter() - self.beg_time):.2f}', 
@@ -196,7 +195,6 @@ class Game:
         f'epsilon: {self.epsilon:.6f}'
         ]
         
-        self.last_time = time.perf_counter()
         cnt = 0 
         for sentence in message:
             text = font.render(sentence, True, (255, 255, 255))
@@ -547,6 +545,7 @@ class Game:
         """
         # Update landing point
         self.__update_expected_landing_point_x(self.env.engine.ball)
+        self.speed = 1 / (time.perf_counter() - self.last_time)
 
         if self.mode == "Train":
             self.__update_train(P1_act, P2_act)
@@ -560,5 +559,6 @@ class Game:
         # Add small rewards
         self.adjusted_reward = calculate_reward(self.done, self.is_player2_win, P2_act, self.env)
         self.losses += [self.loss]
+        self.last_time = time.perf_counter()
 
         return self.adjusted_reward, self.__cal_state(), self.done

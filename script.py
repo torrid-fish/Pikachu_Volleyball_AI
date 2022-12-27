@@ -53,10 +53,10 @@ def train(P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO, DISPLAY, ACTOR_NUM
 
                 # With enough game round, we save trained model.
                 if rounds[i] % UPDATA_TAGESTEP == 0 and rounds[i] != 0 and memory.size() >= BEGIN_LEARN_SIZE:
-                    if DISPLAY == "COMMANDLINE" and i == 0:
+                    if DISPLAY == "COMMANDLINE" and i == ACTOR_NUM - 1:
                         print_info(Pikachus, losses_list)
-                    
-                    print(f'== Model {i} Data saved! ==\n')
+                    if DISPLAY == "PYGAME":
+                        print(f'== Model {i} Data saved! ==\n')
                     torch.save(networks[i], './model/' + P2_TAG + f'_{i}.pth')
                     torch.save(memory, './memory/' + P2_TAG + '.pth')
                     torch.save({'losses': losses_list[i], 'winrts': Pikachus[i].winrts, 'epsilon': epsilons[i], 'pre_result': Pikachus[i].pre_result}, './log/' + P2_TAG + f'_{i}.pth')

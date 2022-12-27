@@ -15,13 +15,15 @@ def interactive_initialization():
     display_mode = {'1': 'PYGAME', '2': 'COMMANDLINE'}
     screen_mode = {'1': 1.3, '2': 0.8}
 
+    os.system('cls')
+
+    print('=========================================================================================')
     if torch.cuda.is_available():
         print('Looks like you can use GPU to speed up! Congrats.')
     else:
         print('Looks like you can only use CPU... Does anything go wrong?')
-    time.sleep(2)    
-
-    os.system('cls')
+    print('=========================================================================================')
+    
     # Load default pattern
     MODE, P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO, DISPLAY, ACTOR_NUM = DEFAULT_PATTERN
     print(f'Would you like to use this default pattern?')
@@ -58,6 +60,7 @@ def interactive_initialization():
     else:
         P1_TAG = 'None'
 
+    # P2
     print('Input P2 mode: (1: Human / 2: Old_AI / 3: D3QN / 4: Attacker)')
     P2_MODE = player_mode[input()]
 
@@ -91,6 +94,8 @@ def interactive_initialization():
         if DISPLAY == 'PYGAME':
             print('Okay, which screen size do you prefer? (1: Medium / 2: Small)')
             RESOLUTION_RATIO = screen_mode[input()]
+        else:
+            RESOLUTION_RATIO = 0
     else:
         DISPLAY = "None"
 
