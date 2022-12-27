@@ -27,10 +27,11 @@ def interactive_initialization():
     print(f'- MODE: {MODE}\n- P1_MODE: {P1_MODE}\n- P2_MODE: {P2_MODE}\n- P1_TAG: {P1_TAG}\n- P2_TAG: ____\n- RESOLUTION_RATIO: {RESOLUTION_RATIO}\n- DISPLAY: {DISPLAY}\n')
     print(f'- Network Structure:\n')
     NETWORK = f'\
-    (1, 17) ⇒ (17, 1024) ⇒ (1024, 512) ⇒ (512, 256) ⇒ (512, 1)   ⇒ (1, 16) \n\
-     INPUT      F1           F2        ⇘  HIDDEN_S     STATE    ⇗  OUTPUT    \n\
-                                         (512, 256) ⇒ (512, 16)              \n\
-                                          HIDDEN_A     ADVANTAGE               '
+                                       ⇗ (512, 256) ⇒ (512, 1) ⇘          \n\
+    (1, 17) ⇒ (17, 1024) ⇒ (1024, 512)     HIDDEN_S     STATE     (1, 16) \n\
+     INPUT      F1           F2        ⇘                      ⇗    OUTPUT  \n\
+                                         (512, 256) ⇒ (512, 16)            \n\
+                                          HIDDEN_A     ADVANTAGE             '
     print(NETWORK)
     print('\n(1: yes / 2: no)')
     DEFAULT = input()
