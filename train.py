@@ -24,6 +24,9 @@ GAMMA = 0.8
 # Size of slice
 BATCH_SIZE = 512
 
+# number of actors in a row
+WID_NUM = 2
+
 # Number of times to update target network
 UPDATA_TAGESTEP = 10
 
@@ -48,20 +51,16 @@ EXPLORE = 500000
 """
     Train function
 """
-def init(P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO, DISPLAY):
-    # Create one game and opponent
+def init(P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO, DISPLAY, ACTOR_NUM):
+    # Config window for APEX
+    global WID_NUM
+    WID_NUM = min(WID_NUM, ACTOR_NUM)
+    HEI_NUM = np.ceil(ACTOR_NUM / WID_NUM)
+    SCREEN_SIZE = (1060 * RESOLUTION_RATIO * WID_NUM + (WID_NUM + 1) * 30, 304 * RESOLUTION_RATIO * HEI_NUM + (HEI_NUM + 1) * 30)
+    # Create one opponent
     P1 = Player(P1_MODE, False, P1_TAG)
-    Pikachu = Game("Train", P1_MODE, P2_MODE, RESOLUTION_RATIO, DISPLAY == 'PYGAME')
 
-    try:
-        network = torch.load('./model/' + P2_TAG + '.pth')
-        target_network = torch.load('./model/' + P2_TAG + '.pth')
-        print('Load previous network successfully.')
-    except FileNotFoundError:
-        network = Dueling_D3QN(OUTPUT_DIM)
-        target_network = Dueling_D3QN(OUTPUT_DIM)
-        print('Can not find previoous network, create a new memory.')
-
+    # Init memory
     try:
         memory = torch.load('./memory/' + P2_TAG + '.pth')
         print('Load previous memory successfully.')
@@ -69,39 +68,66 @@ def init(P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO, DISPLAY):
         memory = PER(REPLAY_MEMORY)
         print('Can not find previoous memory, create a new memory.')
 
+    # Randomly choose one as target_network
     try:
-        epsilon = torch.load('./log/' + P2_TAG + '.pth')['epsilon']
-        pre_result = torch.load('./log/' + P2_TAG + '.pth')['pre_result']
-        winrts = torch.load('./log/' + P2_TAG + '.pth')['winrts']
-        losses = torch.load('./log/' + P2_TAG + '.pth')['losses']
-        print('Load previous log successfully.')
+        target_network = torch.load('./model/' + P2_TAG + f'_{random.randrange(ACTOR_NUM)}.pth')
+        print('Load previous network successfully.')
     except FileNotFoundError:
-        pre_result = []
-        epsilon = BEGIN_EPSILON
-        winrts = []
-        losses = []
-        print('Can not find previoous log, create a new log.')
+        target_network = Dueling_D3QN(OUTPUT_DIM)
+        print('Can not find previoous network, create a new memory.')
 
-    # Update Game value
-    Pikachu.epsilon = epsilon
-    Pikachu.losses = losses
-    Pikachu.winrts = winrts
-    Pikachu.pre_result = pre_result
-    Pikachu.tot = len(winrts)
+    # Init multiple training gym
+    Pikachus, networks, optimizers, epsilons, losses_list = [], [], [], [], []
+    for i in range(ACTOR_NUM):
+        POS = (i % WID_NUM, i // WID_NUM)
+        Pikachu = Game("Train", P1_MODE, P2_MODE, RESOLUTION_RATIO, DISPLAY == 'PYGAME', SCREEN_SIZE, POS)
 
-    # Set to train mode
-    network.train()
-    target_network.train()
-    summary(network)
+        try:
+            network = torch.load('./model/' + P2_TAG + f'_{i}.pth')
+            print('Load previous network successfully.')
+        except FileNotFoundError:
+            network = Dueling_D3QN(OUTPUT_DIM)
+            print('Can not find previoous network, create a new memory.')
 
-    # Store to GPU / CPU
-    network = network.to(device)
-    target_network = target_network.to(device)
+        try:
+            epsilon = torch.load('./log/' + P2_TAG + f'_{i}.pth')['epsilon']
+            pre_result = torch.load('./log/' + P2_TAG + f'_{i}.pth')['pre_result']
+            winrts = torch.load('./log/' + P2_TAG + f'_{i}.pth')['winrts']
+            losses = torch.load('./log/' + P2_TAG + f'_{i}.pth')['losses']
+            print('Load previous log successfully.')
+        except FileNotFoundError:
+            pre_result = []
+            epsilon = BEGIN_EPSILON
+            winrts = []
+            losses = []
+            print('Can not find previous log, create a new log.')
 
-    # Gradiant Optimizer ADAM
-    optimizer = torch.optim.Adam(network.parameters(), lr=LEARNING_RATE)
+        # Update Game value
+        Pikachu.epsilon = epsilon
+        Pikachu.losses = losses
+        Pikachu.winrts = winrts
+        Pikachu.pre_result = pre_result
+        Pikachu.tot = len(winrts)
 
-    return network, target_network, P1, Pikachu, optimizer, memory, epsilon, losses
+        # Set to train mode
+        network.train()
+        target_network.train()
+        summary(network)
+
+        # Store to GPU / CPU
+        network = network.to(device)
+        target_network = target_network.to(device)
+
+        # Gradiant Optimizer ADAM
+        optimizer = torch.optim.Adam(network.parameters(), lr=LEARNING_RATE)
+
+        Pikachus += [Pikachu] 
+        networks += [network] 
+        optimizers += [optimizer] 
+        epsilons += [epsilon] 
+        losses_list += [losses]
+
+    return networks, target_network, P1, Pikachus, optimizers, memory, epsilons, losses_list
 
 def actor(network, target_network, P1, Pikachu, memory: PER, state, epsilon):
     p = random.random()
@@ -200,10 +226,14 @@ def learner(memory: PER, network, target_network, Pikachu, optimizer, losses):
     loss.backward()
     optimizer.step() 
 
-def print_info(Pikachu: Game, loss):
-    print(f'== ROUND {Pikachu.tot} ==')
-    curtime = time.gmtime(time.perf_counter() - Pikachu.beg_time)
-    print(f'- Time: {curtime.tm_hour:02d}:{curtime.tm_min:02d}:{curtime.tm_sec:02d}')
-    print(f'- Win Rate: {Pikachu.prewinrt:.2f}')
-    print(f'- Loss: {loss:.6f}\n')
+def print_info(Pikachus, losses_list):
+    i = 0
+    for Pikachu, losses in zip(Pikachus, losses_list):
+        print(f'== Pikachu {i} ROUND {Pikachu.tot} ==')
+        print(f'- Speed: {Pikachu.speed:.2f}')
+        curtime = time.gmtime(time.perf_counter() - Pikachu.beg_time)
+        print(f'- Time: {curtime.tm_hour:02d}:{curtime.tm_min:02d}:{curtime.tm_sec:02d}')
+        print(f'- Win Rate: {Pikachu.prewinrt:.2f}')
+        print(f'- Loss: {losses[-1]:.6f}\n')
+        i += 1
 

@@ -6,7 +6,8 @@ import time
 """
 You can setting you default mode here.
 """
-DEFAULT_PATTERN = ("Train", "Old_AI", "D3QN", "None", "None", 1.3, "PYGAME")
+#                  MODE   , P1_MODE , P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO, DISPLAY , ACTOR_NUM
+DEFAULT_PATTERN = ("Train", "Old_AI", "D3QN" , "None", "APEX", "Small"         , "PYGAME", 4         )
 
 def interactive_initialization():
     game_mode = {'1': 'Play', '2': 'Train', '3': 'Validate'}
@@ -22,9 +23,9 @@ def interactive_initialization():
 
     os.system('cls')
     # Load default pattern
-    MODE, P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO, DISPLAY = DEFAULT_PATTERN
+    MODE, P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO, DISPLAY, ACTOR_NUM = DEFAULT_PATTERN
     print(f'Would you like to use this default pattern?')
-    print(f'- MODE: {MODE}\n- P1_MODE: {P1_MODE}\n- P2_MODE: {P2_MODE}\n- P1_TAG: {P1_TAG}\n- P2_TAG: ____\n- RESOLUTION_RATIO: {RESOLUTION_RATIO}\n- DISPLAY: {DISPLAY}\n')
+    print(f'- MODE: {MODE}\n- P1_MODE: {P1_MODE}\n- P2_MODE: {P2_MODE}\n- P1_TAG: {P1_TAG}\n- P2_TAG:{P2_TAG}\n- RESOLUTION_RATIO: {RESOLUTION_RATIO}\n- DISPLAY: {DISPLAY}\n- ACTOR_NUM: {ACTOR_NUM}')
     print(f'- Network Structure:\n')
     NETWORK = f'\
                                        ⇗ (512, 256) ⇒ (512, 1) ⇘          \n\
@@ -36,49 +37,75 @@ def interactive_initialization():
     print('\n(1: yes / 2: no)')
     DEFAULT = input()
 
-    # Don't use default pattern.
-    if DEFAULT == '2':
-        print('Alright, what mode do you want: (1: Play / 2: Train / 3: Validate)')
-        MODE = game_mode[input()]
+    # Use DEFAULT to train
+    if DEFAULT == '1':
+        print("Okay, we will start training with DEFAULT settings.")
+        if RESOLUTION_RATIO == "Medium": RESOLUTION_RATIO = 1.3
+        elif RESOLUTION_RATIO == "Small": RESOLUTION_RATIO = 0.8
+        return MODE, P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO, DISPLAY, ACTOR_NUM
 
-        # P1
-        print('Input P1 mode: (1: Human / 2: Old_AI / 3: D3QN / 4: Attacker)')
-        P1_MODE = player_mode[input()]
+    print('Alright, what mode do you want: (1: Play / 2: Train / 3: Validate)')
+    MODE = game_mode[input()]
 
-        if P1_MODE == "D3QN":
-            print('Input the path to the model of P1: ./model/____.pth (only the underline part)')
-            P1_TAG = input()
-            print(f'Okay, we will use the model stored at {P1_TAG}.')
-        else:
-            P1_TAG = 'None'
+    # P1
+    print('Input P1 mode: (1: Human / 2: Old_AI / 3: D3QN / 4: Attacker)')
+    P1_MODE = player_mode[input()]
 
-        print('Input P2 mode: (1: Human / 2: Old_AI / 3: D3QN / 4: Attacker)')
-        P2_MODE = player_mode[input()]
-        
-    print('Input the path to the model of P2: ./model/____.pth (only the underline part)')
-    P2_TAG = input()
-    print(f'Okay, the model of P2 will be stored at {P2_TAG}.') 
+    if P1_MODE == "D3QN":
+        print('Input the path to the model of P1: ./model/____.pth (only the underline part)')
+        P1_TAG = input()
+        print(f'Okay, we will use the model stored at {P1_TAG}.')
+    else:
+        P1_TAG = 'None'
 
-    if MODE == 'Train' and DEFAULT == '2':
+    print('Input P2 mode: (1: Human / 2: Old_AI / 3: D3QN / 4: Attacker)')
+    P2_MODE = player_mode[input()]
+
+    if MODE == "Train":
+        print('Would you like to use APEX? (1: yes, 2: no)')
+        APEX = input()
+    else:
+        APEX = "0"
+
+    if APEX == '1':
+        print('OK, then how many player would you like to use?')
+        ACTOR_NUM = int(input())
+    else:
+        ACTOR_NUM = 1
+
+    if P2_MODE == "D3QN":    
+        print('Input the path to the model of P2: ./model/____.pth (only the underline part)')
+        P2_TAG = input()
+    else:
+        P2_TAG = "None"
+
+    if MODE == "Train":
+        print(f'Okay, the model of P2 will be stored at {P2_TAG}.') 
+    else:
+        print(f'Okay, we will use the model stored at {P2_TAG}.')
+
+    if MODE == 'Train':
         print('By the way, would you like to use pygame to display? (1: use pygame, 2: use command line)')
         DISPLAY = display_mode[input()]
         
         if DISPLAY == 'PYGAME':
             print('Okay, which screen size do you prefer? (1: Medium / 2: Small)')
             RESOLUTION_RATIO = screen_mode[input()]
-        
+    else:
+        DISPLAY = "None"
+
     # Return all infomations    
-    return MODE, P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO, DISPLAY
+    return MODE, P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO, DISPLAY, ACTOR_NUM
 
 if __name__ == '__main__':
     # Initialization
-    MODE, P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO, DISPLAY = interactive_initialization()
+    MODE, P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO, DISPLAY, ACTOR_NUM = interactive_initialization()
 
     if MODE == "Play":
         play(P1_MODE, P2_MODE, P1_TAG, P2_TAG)
     
     elif MODE == "Train":
-        train(P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO, DISPLAY)
+        train(P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO, DISPLAY, ACTOR_NUM)
 
     elif MODE == "Validate":
         validate(P1_MODE, P2_MODE, P1_TAG, P2_TAG)

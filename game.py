@@ -37,7 +37,7 @@ class Game:
     ### Test
     Currently for test mode, nothing special will be shown.
     """
-    def __init__(self, mode: str, P1_mode: str, P2_mode: str, resolution_ratio: float, display: bool):
+    def __init__(self, mode: str, P1_mode: str, P2_mode: str, resolution_ratio: float, display: bool, SCREEN_SIZE: tuple = None, POS: tuple = None):
         # Sanity check
         self.mode_list = ["Train", "Play", "Validate"]
         if mode not in self.mode_list:
@@ -84,8 +84,10 @@ class Game:
                 self.screen = pygame.display.set_mode((self.resolution_ratio * 432, self.resolution_ratio * 304))
             elif mode == "Train":
                 self.resolution_ratio = resolution_ratio
-                self.sx, self.sy = 30, 30
-                self.screen = pygame.display.set_mode((1120 * self.resolution_ratio, 304 * self.resolution_ratio + 2 * 30))
+                WIDTH = 1060 * self.resolution_ratio
+                HEIGHT = 304 * self.resolution_ratio
+                self.sx, self.sy = (POS[0] + 1) * 30 + POS[0] * WIDTH, (POS[1] + 1) * 30 + POS[1] * HEIGHT
+                self.screen = pygame.display.set_mode(SCREEN_SIZE)
             elif mode == "Validate":
                 self.resolution_ratio = resolution_ratio
                 self.sx, self.sy = 0, 0
@@ -145,7 +147,7 @@ class Game:
         image_width, image_height = canvas.get_width_height()
         surface = pygame.image.frombuffer(buf, (image_width, image_height), 'RGBA')
         surface = pygame.transform.scale(surface, (304 * self.resolution_ratio / image_height * image_width, 304 * self.resolution_ratio / image_height * image_height))
-        self.screen.blit(surface, (self.sx + 1 * (self.sx + self.resolution_ratio * 432), self.sy))
+        self.screen.blit(surface, (self.sx + self.resolution_ratio * 432 + 30, self.sy))
 
     def __draw_lose_pt(self):
         font = pygame.font.Font(None, int(30*self.resolution_ratio))
@@ -173,16 +175,17 @@ class Game:
         self.screen.blit(text, P2_rect)
 
     def __draw_info(self):
-        surface = pygame.Surface((400, self.resolution_ratio * 304))
+        surface = pygame.Surface((self.resolution_ratio * 190, self.resolution_ratio * 304))
         surface.fill((0, 0, 0))
-        self.screen.blit(surface, (2 * (30 + self.resolution_ratio * 432), 30))
+        self.screen.blit(surface, (self.sx + (30 + 2 * self.resolution_ratio * 432), self.sy))
         font = pygame.font.Font(None, int(20 * self.resolution_ratio))
 
         curtime = time.gmtime(time.perf_counter() - self.beg_time)
+        self.speed = 1 / (time.perf_counter() - self.last_time)
 
         message = [
         f'Speed(round/s): {self.tot / (time.perf_counter() - self.beg_time):.2f}', 
-        f'Speed(frm/s): {1 / (time.perf_counter() - self.last_time):.2f}',
+        f'Speed(frm/s): {self.speed:.2f}',
         f'== P2 info ==',
         f'win rate: {self.prewinrt:.2f}',
         f'== Train info ==',
@@ -198,7 +201,7 @@ class Game:
         for sentence in message:
             text = font.render(sentence, True, (255, 255, 255))
             if cnt == 0: h = text.get_height()
-            self.screen.blit(text, (2 * (30 + self.resolution_ratio * 432), 30 + cnt * h))
+            self.screen.blit(text, (self.sx + (30 + 2 * self.resolution_ratio * 432), self.sy + cnt * h))
             cnt += 2    
 
     def __draw_control(self, drawP1: bool, P1_act: int, drawP2: bool, P2_act: int):
