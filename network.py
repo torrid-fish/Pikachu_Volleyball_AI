@@ -155,14 +155,16 @@ class Dueling_D3QN(nn.Module):
     def __init__(self, action_dim):
         super(Dueling_D3QN, self).__init__()
 
-        self.f1 = nn.Linear(17, 1024)
-        self.f2 = nn.Linear(1024, 512)
+        self.f1 = nn.Linear(17, 128)
+        self.f2 = nn.Linear(128, 512)
+        self.f3 = nn.Linear(512, 1024)
+        
 
-        self.val_hidden = nn.Linear(512, 256)
-        self.adv_hidden = nn.Linear(512, 256)
+        self.val_hidden = nn.Linear(1024, 512)
+        self.adv_hidden = nn.Linear(1024, 512)
 
-        self.val = nn.Linear(256, 1) # State value
-        self.adv = nn.Linear(256, action_dim) # Advantage value
+        self.val = nn.Linear(512, 1) # State value
+        self.adv = nn.Linear(512, action_dim) # Advantage value
 
         torch.nn.init.normal_(self.val_hidden.weight, 0, 0.02)
         torch.nn.init.normal_(self.f2.weight, 0, 0.02)
@@ -177,6 +179,9 @@ class Dueling_D3QN(nn.Module):
         x = F.relu(x)
 
         x = self.f2(x)
+        x = F.relu(x)
+        
+        x = self.f3(x)
         x = F.relu(x)
 
         val_hidden = self.val_hidden(x)

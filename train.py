@@ -19,7 +19,7 @@ INPUT_DIM = 17
 OUTPUT_DIM = 18
 
 # Reward gamma
-GAMMA = 0.8
+GAMMA = 0.99
 
 # Size of slice
 BATCH_SIZE = 512
@@ -31,7 +31,7 @@ WID_NUM = 2
 UPDATA_TAGESTEP = 10
 
 # Memory size
-REPLAY_MEMORY = 16384
+REPLAY_MEMORY = 8192
 
 # This should be smaller than `REPLAY_MEMORY` to start learning
 BEGIN_LEARN_SIZE = 2048
@@ -40,13 +40,13 @@ BEGIN_LEARN_SIZE = 2048
 LEARNING_RATE = 1e-5
 
 # Begin value of epsilon
-BEGIN_EPSILON = 0.2
+BEGIN_EPSILON = 0.15
 
 # Smallest epsilon
 FINAL_EPSILON = 0.001
 
 # Controlling the epsilon
-EXPLORE = 500000
+EXPLORE = 100000
 
 """
     Train function
