@@ -2,6 +2,7 @@ from script import play, train, validate
 import os
 import torch
 import time
+os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
 """
 You can setting you default mode here.

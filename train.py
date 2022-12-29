@@ -22,7 +22,7 @@ OUTPUT_DIM = 18
 GAMMA = 0.99
 
 # Size of slice
-BATCH_SIZE = 512
+BATCH_SIZE = 128
 
 # number of actors in a row
 WID_NUM = 2
@@ -112,7 +112,7 @@ def init(P1_MODE, P2_MODE, P1_TAG, P2_TAG, RESOLUTION_RATIO, DISPLAY, ACTOR_NUM)
         # Set to train mode
         network.train()
         target_network.train()
-        summary(network)
+        # summary(network)
 
         # Store to GPU / CPU
         network = network.to(device)

@@ -72,18 +72,65 @@ def get_reward_by_user_input(P2_act, env):
                         reward += int(userInput.y_direction == -1)
         return reward / 100
 
+
+def get_reward_by_ball_and_junp(env,prev_ball_land_x,is_fire,fire_collide_ball):
+    player, ball, theOtherPlayer = env.engine.players[1], env.engine.ball, env.engine.players[0]
+    is_def = 0
+    reward = 0
+    if(ball.expected_landing_point_x > GROUND_HALF_WIDTH):
+        is_def = 1
+    else:
+        is_def = 0
+
+        
+    is_colliding = abs(ball.x - player.x) <= PLAYER_HALF_LENGTH and abs(ball.y - player.y) <= PLAYER_HALF_LENGTH
+    
+    if(is_colliding and is_fire == 1):
+        fire_collide_ball = 1
+
+    if(player.y < PLAYER_TOUCHING_GROUND_Y_COORD ):
+        if(is_fire != 1):
+            is_fire = 1
+    else:
+        if(is_fire != 0):
+            if(fire_collide_ball == 0):
+                reward -= 0.4
+            else:
+                reward += 0.4
+            is_fire = 0
+            fire_collide_ball = 0
+    
+    if(is_def):
+        warning_height = NET_PILLAR_TOP_TOP_Y_COORD * 0.6
+        if(ball.y < warning_height):
+            if(abs(player.x-ball.expected_landing_point_x) > 50):
+                reward -= ((abs(player.x-ball.expected_landing_point_x)-40)%10)*0.003
+        else:
+            if(abs(player.x-ball.expected_landing_point_x) > 30):
+                reward -= ((abs(player.x-ball.expected_landing_point_x)-20)%10)*0.006
+            if(player.y < ball.y):
+                reward -= 0.03
+    else:
+        if(abs(theOtherPlayer.x-ball.expected_landing_point_x) > 50):
+                reward += ((abs(player.x-ball.expected_landing_point_x)-40)%10)*0.015
+    
+    return reward
+
+prev_ball_land_x = 0 
+is_fire = 0
+fire_collide_ball = 0
 def calculate_reward(done: bool, is_P2_win: bool, P2_act, env):
     """
     This is the place you can adjust the reward funtion.
     """
     if done and is_P2_win:
     # P2 WIN
-        reward = 1 + get_reward_by_user_input(P2_act, env)
+        reward = 1 + get_reward_by_ball_and_junp( env,prev_ball_land_x,is_fire,fire_collide_ball)
     elif done and not is_P2_win:
     # P2 LOSE
         reward = -2
     else:
     # GAME IN PROGESS
-        reward = get_reward_by_user_input(P2_act, env)
+        reward = get_reward_by_ball_and_junp(env,prev_ball_land_x,is_fire,fire_collide_ball)
 
     return reward

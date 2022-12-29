@@ -539,7 +539,7 @@ class Game:
             self.is_player1_win, self.is_player2_win = 0, 0
         return state
 
-    def update(self, P1_act, P2_act) -> tuple[int, list]:
+    def update(self, P1_act, P2_act):
         """
         This function will return `reward, next_state, done`.
         """

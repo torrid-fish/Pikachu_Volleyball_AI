@@ -166,8 +166,11 @@ class Dueling_D3QN(nn.Module):
         self.val = nn.Linear(512, 1) # State value
         self.adv = nn.Linear(512, action_dim) # Advantage value
 
-        torch.nn.init.normal_(self.val_hidden.weight, 0, 0.02)
+        torch.nn.init.normal_(self.f1.weight, 0, 0.02)
         torch.nn.init.normal_(self.f2.weight, 0, 0.02)
+        torch.nn.init.normal_(self.f3.weight, 0, 0.02)
+        
+        torch.nn.init.normal_(self.val_hidden.weight, 0, 0.02)      
         torch.nn.init.normal_(self.val.weight, 0, 0.02)
         torch.nn.init.normal_(self.adv_hidden.weight, 0, 0.02)
         torch.nn.init.normal_(self.adv.weight, 0, 0.02)
