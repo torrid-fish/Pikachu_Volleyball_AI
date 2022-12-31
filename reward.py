@@ -112,7 +112,7 @@ def get_reward_by_ball_and_junp(env,prev_ball_land_x,is_fire,fire_collide_ball):
                 reward -= 0.03
     else:
         if(abs(theOtherPlayer.x-ball.expected_landing_point_x) > 50):
-                reward += ((abs(player.x-ball.expected_landing_point_x)-40)%10)*0.015
+                reward += ((abs(theOtherPlayer.x-ball.expected_landing_point_x)-40)%10)*0.015
     
     return reward
 
